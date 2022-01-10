@@ -244,27 +244,6 @@ class SlDef(Slots):
 			return f"{self.__name_repr__()}: {self.format}"
 
 		@classmethod
-		def _choices(cls, format):
-			res = [[]]
-			for i in format:
-				if (i == '|'): res.append([])
-				elif (isiterablenostr(i)): res[-1].append(cls._choices(i))
-				else: res[-1].append(i)
-			return res
-
-		@property
-		def choices(self):
-			return self._choices(self.format)
-
-		@property
-		def literals(self):
-			return tuple(j.strip().strip("'").join("''").encode().decode('unicode_escape') for i in self.choices if assert_(len(i) == 1) for j in i)
-
-		@property
-		def charset(self):
-			return str().join(self.literals)
-
-		@classmethod
 		def parse(cls, *, name, tokens, special, final):
 			format = Format.parse(tokens)
 			res = cls(name, format, special=special, final=final)
