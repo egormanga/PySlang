@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<language id="slangdef" name="Slang definition" version="2.0" _section="Script">
+	<metadata>
+		<property name="mimetypes">text/x-slangdef;application/x-slangdef</property>
+		<property name="globs">*.sldef</property>
+		<property name="line-comment-start">#</property>
+	</metadata>
+
+	<styles>
+		<style id="comment"		name="Comment"			map-to="def:comment"/>
+		<style id="literal"		name="String"			map-to="def:string"/>
+		<style id="regex"		name="Regular expression"	map-to="def:special-constant"/>
+		<style id="escaped-char"	name="Escaped Character"	map-to="def:special-char"/>
+		<style id="operator"		name="Operator"			map-to="def:operator"/>
+		<style id="special"		name="Special"			map-to="def:special-constant"/>
+		<style id="definition"		name="Definition"		map-to="def:preprocessor"/>
+		<style id="final"		name="Final"			map-to="def:statement"/>
+		<style id="reference"		name="Reference"		map-to="def:identifier"/>
+	</styles>
+
+	<definitions>
+		<define-regex id="identifier">[^\W\d][\w]*</define-regex>
+
+		<context id="comment" style-ref="comment" end-at-line-end="true" class="comment" class-disabled="no-spell-check">
+			<start>#</start>
+			<include>
+				<context ref="def:in-line-comment"/>
+			</include>
+		</context>
+
+		<context id="escaped-char" style-ref="escaped-char" extend-parent="true">
+			<match extended="true">
+				\\  # leading backslash
+				(
+					[\\'"abefnrtv]  |  # single escaped char
+					x[0-9A-Fa-f]{2} |  # \xhh - character with hex value hh
+					[0-7]{1,3}         # \ooo - character with octal value ooo
+				)
+			</match>
+		</context>
+
+		<context id="literal" style-ref="literal" end-at-line-end="true" class="string" class-disabled="no-spell-check">
+			<start>'</start>
+			<end>'</end>
+		</context>
+
+		<context id="regex" style-ref="regex" end-at-line-end="true" class="string">
+			<start>/</start>
+			<end>/</end>
+			<include>
+				<context ref="escaped-char"/>
+			</include>
+		</context>
+
+		<context id="operator" style-ref="operator">
+			<match>[|+*?]</match>
+		</context>
+
+		<context id="special" style-ref="special">
+			<match>[()\[\]]</match>
+		</context>
+
+		<context id="definition">
+			<match extended="true">
+				(@?)
+				(\%{identifier}:)
+			</match>
+			<include>
+				<context sub-pattern="1" style-ref="final"/>
+				<context sub-pattern="2" style-ref="definition"/>
+			</include>
+		</context>
+
+		<context id="reference" style-ref="reference">
+			<match extended="true">
+				\%{identifier}
+			</match>
+		</context>
+
+		<context id="slangdef" class="no-spell-check">
+			<include>
+				<context ref="comment"/>
+				<context ref="literal"/>
+				<context ref="regex"/>
+				<context ref="escaped-char"/>
+				<context ref="operator"/>
+				<context ref="special"/>
+				<context ref="definition"/>
+				<context ref="reference"/>
+			</include>
+		</context>
+	</definitions>
+</language>
+
+<!-- by Sdore, 2021
+     slang.sdore.me -->

@@ -1,0 +1,193 @@
+# Slang syntax definition
+
+
+## Abstract
+
+codesep: \n | ';'
+
+code: '{' codesep* (expr codesep+)* codesep* '}' | ':' expr (';' expr)* ';'?
+
+block: code
+
+
+## Primitive
+
+unpreopexpr: unop expr
+unpostopexpr: expr unpostop
+unopexpr: unpreopexpr | unpostopexpr
+
+binopexpr: expr binop expr
+
+expr: '(' expr ')' | unopexpr | binopexpr | funccall | itemget | attrget | varname | lambda | literal
+ # (`f(x+3)` is an instance of `expr`, also `f`, `x+3` and `x` are `expr`s too)
+
+
+## Non-final
+
+typename: modifier* type
+
+vardefassignment: identifier ('=' expr)?
+
+argdef: typename? identifier ('[' number ']' | '?' | '+' | '*' | '**' | '=' expr)? | '*' | '/'
+ # `, /,` — end of positional-only arguments
+ # `, *,` — start of keyword-only arguments
+ # in order of positional argument capturing precedence:
+ # `arg[n]` — packs a tuple of `n` values from positional arguments
+ # `arg?` — optional argument (start capturing only after all required arguments are fulfilled)
+ # `arg+` — packs a tuple with at least one value from leftover positionals (incompatible with `arg*`)
+ # `arg*` — packs a tuple with any number of values from leftover positionals (incompatible with `arg+`)
+ # `arg**` — packs a dict with all leftover keyword arguments
+ # `arg=val` — optional argument with a default value
+
+lambda: '(' (argdef (',' argdef)*)? ')' '->' typename (code | '=' expr)
+
+callarg: '*'? expr
+callargs: callarg (',' callarg)*
+
+callkwarg: identifier ('=' | ':') expr | '**' expr
+callkwargs: callkwarg (',' callkwarg)*
+
+itemget: expr '[' expr ']' # TODO: slices
+
+attrselfop: '@.' | '@' | '.' | ':'
+attrop: '->' | attrselfop
+attrget: (attrselfop | expr attrop) identifier
+attrset: (attrselfop | expr attrop) assignment
+
+classblock: block | classkeyworddef # XXX FIXME
+classargdef: typename? varname ('?' | '+' | '*' | '**' | '=' expr)?
+classkeyworddefargs: classargdef | '(' classargdef (',' classargdef)* ')'
+classkeyworddef: classdefkeyword classkeyworddefargs block
+
+## Final
+
+@funcdef: (typename | 'def') identifier '(' argdef (',' argdef)* ')' (code | '=' expr)
+
+@keywordexpr: exprkeyword expr?
+
+@vardef: typename vardefassignment (',' vardefassignment)*
+
+@assignment: varname '=' expr
+
+@inplaceopassignment: varname [binop '='] expr
+
+@unpackassignment: varname (',' varname)* '=' expr
+
+@inplaceopunpackassignment: varname (',' varname)* [binop '='] expr
+
+@funccall: expr '(' (callargs | callkwargs | callargs ',' callkwargs) ')'
+
+# expression evaluation (only in REPL)
+@replexpr: expr
+
+@conditional: 'if' expr block ('elif' expr block)*
+
+@forloop: 'for' identifier 'in' expr block
+
+@whileloop: 'while' expr block
+
+@elseclause: 'else' block
+
+@keyworddef: defkeyword block
+
+@classdef: 'class' identifier ('(' identifier (',' identifier)* ')')? '{' classblock '}'
+
+
+## Keywords
+
+return: 'return' expr
+
+import: 'import' (identifier ':')? (identifier '/')* identifier (':' (identifier | '*'))?  # ns:path/to/package:names
+
+delete: 'delete' varname
+
+assert: 'assert' expr
+
+exprkeyword: return | 'break' | 'continue' | import | delete | assert | 'super' | 'breakpoint'
+
+defkeyword: 'main' | 'exit'
+
+classdefkeyword: 'init' | 'constr' | 'property' | 'repr' | 'eq'
+
+
+## Modifiers
+
+modifier: 'const' | 'static' | 'volatile'
+
+
+## Reserved keywords
+
+reserved: 'def' | 'try' | 'catch' | 'except' | 'finally' | 'raise' | 'with' | 'yield' | 'include' | 'using' | 'default'
+
+
+## Identifiers
+
+identifier: /[^\W\d][\w]*/
+
+varname: ['.'? identifier]
+
+
+## Data types
+
+type: ['u'? ('int' | 'float' | 'complex')] |
+      [('i' | 'u' | 'u'? ('f' | 'c')) ('8' | '16' | '32' | '64' | '128')] |
+      'bool' | 'byte' | 'char' | 'str' | 'void' | 'auto'
+
+
+## Literals
+
+number: /[^\D0]\d*/
+
+char: /\\ ([\\'"abefnrtv] | N\{[0-9A-Z\ -]+\} | u[0-9A-Fa-f]{4} | U[0-9A-Fa-f]{8} | x[0-9A-Fa-f]{1,2} | [0-7]{1,3}) | [^\\]/
+
+character: [\' char \']
+
+string: ['f'? ('"' char* '"' | \' char* \')]
+
+list: '[' type (':' expr (',' expr)*)? ']'
+
+tuple: '(' type expr (',' type expr)* ')'
+
+map: '{' expr ':' expr (',' expr ':' expr)* '}'
+
+set: '{' expr (',' expr)* '}'
+
+literal: number | character | string | list | tuple | map | set
+
+
+## Operators
+
+unchop: '!' | '+' | '-' | '~'
+undchop: '++' | '--'
+unkwop: 'not'
+unmathop: 'floor' | 'ceil' | 'round' |
+          ['i'? 'sqrt'] |
+          ['exp' 'm1'?] |
+          ('ln' | 'lb' | 'lg' | ['log' ('2' | '10' | '1p')]) |
+          ['a'? (('sin' | 'cos' | ('tan' | 'tg') | ('cotan' | 'ctg')) 'h'? | 'tan2')]
+unop: unchop | undchop | unkwop | unmathop
+
+unchpostop: '!'
+undchpostop: '++' | '--' | '**'
+unpostop: unchpostop | undchpostop
+
+binchop: '%' | '&' | '*' | '+' | '-' | '/' | '<' | '=' | '>' | '^' | '|'
+bindchop: '==' | '**' | '//' | '<<' | '>>'
+binkwop: 'is' | 'is not' | 'in' | 'not in' | 'not' | 'and' | 'but' | 'xor' | 'or' | 'isof'
+binmathop: 'pow'
+binop: binchop | bindchop | binkwop | binmathop
+
+
+## Specials
+
+:whitespace: ' ' | \t | \r | \v | \f
+
+:comment: \#
+
+:continuation: \\
+
+:special: '..' | ':=' | ',' | '?' | '=' | '(' | ')' | '{' | '}'
+
+
+# by Sdore, 2021
+# slang.sdore.me
