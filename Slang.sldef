@@ -182,12 +182,12 @@ binop: binchop | bindchop | binkwop | binmathop
 
 :whitespace: ' ' | \t | \r | \v | \f
 
-:comment: \#
+:comment: \# | [\# '|'] /.*/ ['|' \#]
 
 :continuation: \\
 
 :special: '..' | ':=' | ',' | '?' | '=' | '(' | ')' | '{' | '}'
 
 
-# by Sdore, 2021
-# slang.sdore.me
+# by Sdore, 2021-2022
+#  slang.sdore.me

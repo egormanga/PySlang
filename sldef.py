@@ -25,7 +25,7 @@ class Tokenizer:
 				break
 			else: break
 
-		assert (not s)
+		if (s): raise WTFException(s)
 		return tokens
 
 	@classmethod
@@ -96,6 +96,10 @@ class Format(Slots):
 		def __repr__(self):
 			return f"<\033[1;92m{self.__class__.__name__}\033[0m:" + (f"\n{S(repr(self.token)).indent()}\n" if (not isinstance(self.token, str)) else f" \033[95m{repr(self.token)}\033[0m") + ">"
 
+		def flatten(self):
+			if (isinstance(self.token, Format.Token)): self.token = self.token.flatten()
+			return self
+
 	class Reference(Token):
 		token: str
 
@@ -114,17 +118,21 @@ class Format(Slots):
 			self.__init__(token.token)
 
 		def __str__(self):
-			return repr(self.token)
+			if ('#' not in self.token): return repr(self.token)
+			return r' \# '.join(repr(i) if (i) else '' for i in self.token.split('#')).strip().join('[]')
 
 	class Escape(Literal):
+		_table = {r"\x%02x" % rf"\{i}".encode().decode('unicode_escape').encode()[0]: rf"\{i}" for i in 'abfnrtv'}
+
 		token: str
 
 		@dispatch
 		def __init__(self, token: str):
-			self.token = token.encode().decode('unicode_escape')
+			self.token = token.encode().decode('unicode_escape') if (token != r'\#') else '#'
 
 		def __str__(self):
-			return ('\\' + (self.token.encode('unicode_escape').decode().lstrip('\\') or '\\'))
+			s = ('\\' + (self.token.encode('unicode_escape').decode().lstrip('\\') or '\\'))
+			return self._table.get(s, s)
 
 	class Pattern(Token):
 		token: str
@@ -134,15 +142,15 @@ class Format(Slots):
 
 	class Optional(Token):
 		def __str__(self):
-			return f"{self.token}?"
+			return f"{str(self.token).join('()') if (isinstance(self.token, Format.TokenList)) else self.token}?"
 
 	class ZeroOrMore(Optional):
 		def __str__(self):
-			return f"{self.token}*"
+			return f"{str(self.token).join('()') if (isinstance(self.token, Format.TokenList)) else self.token}*"
 
 	class OneOrMore(Token):
 		def __str__(self):
-			return f"{self.token}+"
+			return f"{str(self.token).join('()') if (isinstance(self.token, Format.TokenList)) else self.token}+"
 
 	class TokenList(Token):
 		tokens: list
@@ -160,26 +168,57 @@ class Format(Slots):
 
 		def pop(self):
 			if (self.tokens and isinstance(self.tokens[-1], Format.TokenList)): return self.tokens[-1].tokens.pop()
-			assert (self.tokens and self.tokens[-1])
+			if (not self.tokens or not self.tokens[-1]): raise WTFException(self)
 			return self.tokens.pop()
 
 		def flatten(self):
 			for ii, i in enumerate(self.tokens):
-				if (isinstance(i, Format.TokenList)): self.tokens[ii] = i.flatten()
+				if (isinstance(i, Format.Token)): self.tokens[ii] = i.flatten()
 
 			return (self.tokens[0] if (len(self.tokens) == 1) else self)
 
+		@property
+		def literals(self):
+			if (not all(isinstance(i, Format.Literal) for i in self.tokens)): raise AttributeError('literals')
+			return tuple(i.token for i in self.tokens)
+
 	class Sequence(TokenList):
 		def __str__(self):
-			return ' '.join(map(str, self.tokens)).join('()')
+			return ' '.join(str(i).join('()') if (isinstance(i, Format.Choice)) else str(i) for i in self.tokens)
+
+		@property
+		def sequence(self):
+			return self.tokens
 
 	class Choice(TokenList):
 		def __str__(self):
-			return ' | '.join(map(str, self.tokens)).join('()')
+			return ' | '.join(str(i).join('()') if (isinstance(i, Format.Choice)) else str(i) for i in self.tokens)
+
+		@property
+		def choices(self):
+			return self.tokens
+
+		@property
+		def charset(self):
+			if (not all(isinstance(i, Format.Literal) and len(i.token) == 1 for i in self.tokens)): raise AttributeError('charset')
+			return str().join(i.token for i in self.tokens)
 
 	class Joint(TokenList):
 		def __str__(self):
-			return ' '.join(map(str, self.tokens)).join('[]')
+			return Format.Sequence.__str__(self).join('[]')
+
+		def append(self, token):
+			self.tokens.append(token)
+
+		def flatten(self):
+			tokens = list()
+			for i in self.tokens:
+				if (tokens and isinstance(tokens[-1], Format.Literal) and isinstance(i, Format.Literal)):
+					tokens[-1] = Format.Literal(tokens[-1].token + i.token)
+				else: tokens.append(i)
+			self.tokens = tokens
+
+			return super().flatten()
 
 	format: 'TokenList'
 
@@ -193,16 +232,19 @@ class Format(Slots):
 	def __str__(self):
 		return str(self.format)
 
+	def flatten(self):
+		self.format = self.format.flatten()
+
 	@classmethod
-	def parse(cls, tokens, *, _joint=False):
-		if (_joint): format, end = cls.Joint([]), ']'
+	def parse(cls, tokens, *, _group=False):
+		if (_group == '['): format, end = cls.Joint([]), ']'
 		else: format, end = cls.Choice([cls.Sequence([])]), ')'
 
 		while (tokens):
 			token = tokens.pop(0)
 			if (token == end): break
 
-			if (token in ('(', '[')): token = cls.parse(tokens, _joint=token == '[').format
+			if (token in ('(', '[')): token = cls.parse(tokens, _group=token).format
 			elif (token == '|'):
 				if (not isinstance(format, cls.Choice) or format.tokens[-1].tokens and format.tokens[-1].tokens[-1] == '|'): raise WTFException(token)
 				format.tokens.append(cls.Sequence([]))
@@ -217,9 +259,6 @@ class Format(Slots):
 			else: token = cls.Reference(token)
 
 			format.append(token)
-
-		format = format.flatten()
-		if (not isinstance(format, cls.TokenList)): format = cls.Sequence([format])
 
 		return cls(format)
 
@@ -246,8 +285,8 @@ class SlDef(Slots):
 		@classmethod
 		def parse(cls, *, name, tokens, special, final):
 			format = Format.parse(tokens)
-			res = cls(name, format, special=special, final=final)
-			return res
+			format.flatten()
+			return cls(name, format.format, special=special, final=final)
 
 	def __init__(self, definitions=None, finals=None):
 		if (definitions is not None): self.definitions |= definitions
@@ -257,7 +296,7 @@ class SlDef(Slots):
 	finals: list
 
 	@classmethod
-	def build(cls, src):
+	def parse(cls, src):
 		defs = dict()
 
 		pl = None
@@ -278,16 +317,20 @@ class SlDef(Slots):
 				name = ':'+name
 			else: name, _, value = l.partition(':')
 
-			assert (name not in defs)
+			if (name in defs): raise WTFException(name)
 
 			defs[name] = value.strip()
 
-		assert (pl is None)
+		if (pl is not None): raise WTFException(pl)
 
+		return defs
+
+	@classmethod
+	def build(cls, src):
 		definitions = dict()
 		finals = list()
 
-		for k, v in defs.items():
+		for k, v in cls.parse(src).items():
 			tokens = Tokenizer.tokenize(v)
 
 			if (special := k.startswith(':')): k = k[1:]
@@ -303,23 +346,28 @@ def load(file=DEFAULT_DEF):
 	sldef = SlDef.build(src)
 	return sldef
 
-def main():
-	sldef = load()
+@apmain
+@aparg('file', metavar='file.sld', nargs='?', default=DEFAULT_DEF)
+def main(cargs):
+	sldef = load(cargs.file)
 
 	res = tuple(sldef.definitions.values())
 
 	print('\n\n'.join(map(str, res)))
-	#print('\n\n'.join(map(repr, res)))
-	print(f"\n# Finals: {', '.join(sldef.finals)}")
+	print('\n\n'.join(map(repr, res)))
+	print(f"\n\033[2m# Finals: {', '.join(sldef.finals)}\033[0m")
+
+	for i, j in zip((f"{k}: {v}" for k, v in SlDef.parse(open(cargs.file).read()).items()), map(str, res)):
+		if (i != j): sys.exit(f"\n\033[1;91mMismatch!\033[0m\n\033[92mExpected:\033[0m  {i}\n\033[93mGot:\033[0m       {j}")
 
 	check = SlDef.build('\n'.join(map(str, res))).definitions.values()
 
-	print('\n\n'.join(map(repr, check)))
+	#print('\n\n'.join(map(repr, check)))
 
 	for i, j in zip(map(str, res), map(str, check)):
-		assert (i == j)
+		if (i != j): raise Exception(i, j)
 
 if (__name__ == '__main__'): exit(main())
 
-# by Sdore, 2021
-# slang.sdore.me
+# by Sdore, 2021-2022
+#  slang.sdore.me

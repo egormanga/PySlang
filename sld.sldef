@@ -10,7 +10,7 @@ operator: type 'operator' (unopexpr | binopexpr | itemget)
 
 castable: 'castable' 'to' type
 
-call: 'call' type '(' argdef (',' argdef)* ')';
+call: 'call' type '(' argdef (',' argdef)* ')'
 
 definition: operator | castable | call | methoddef | fielddef
 
@@ -107,5 +107,5 @@ special: \\ | '..' | ':=' | ',' | '?' | '=' | '(' | ')' | '{' | '}'
 whitespace: ' ' | \t | \r | \v | \f
 
 
-# by Sdore, 2021
-# slang.sdore.me
+# by Sdore, 2021-2022
+#  slang.sdore.me

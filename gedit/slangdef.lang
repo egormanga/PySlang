@@ -22,22 +22,22 @@
 	<definitions>
 		<define-regex id="identifier">[^\W\d][\w]*</define-regex>
 
+		<context id="escaped-char" style-ref="escaped-char" extend-parent="true">
+			<match extended="true">
+				\\  # leading backslash
+				(
+					[\\#'"abefnrtv] |  # single escaped char
+					x[0-9A-Fa-f]{2} |  # \xhh - character with hex value hh
+					[0-7]{1,3}         # \ooo - character with octal value ooo
+				)
+			</match>
+		</context>
+
 		<context id="comment" style-ref="comment" end-at-line-end="true" class="comment" class-disabled="no-spell-check">
 			<start>#</start>
 			<include>
 				<context ref="def:in-line-comment"/>
 			</include>
-		</context>
-
-		<context id="escaped-char" style-ref="escaped-char" extend-parent="true">
-			<match extended="true">
-				\\  # leading backslash
-				(
-					[\\'"abefnrtv]  |  # single escaped char
-					x[0-9A-Fa-f]{2} |  # \xhh - character with hex value hh
-					[0-7]{1,3}         # \ooo - character with octal value ooo
-				)
-			</match>
 		</context>
 
 		<context id="literal" style-ref="literal" end-at-line-end="true" class="string" class-disabled="no-spell-check">
@@ -93,5 +93,5 @@
 	</definitions>
 </language>
 
-<!-- by Sdore, 2021
-     slang.sdore.me -->
+<!-- by Sdore, 2021-2022
+        slang.sdore.me -->
