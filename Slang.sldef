@@ -19,7 +19,7 @@ unopexpr: unpreopexpr | unpostopexpr
 binopexpr: expr binop expr
 
 expr: '(' expr ')' | unopexpr | binopexpr | funccall | itemget | attrget | varname | lambda | literal
- # (`f(x+3)` is an instance of `expr`, also `f`, `x+3` and `x` are `expr`s too)
+ # (`f(x+3)` is an instance of `expr`, also `f`, `x+3` and `x` are `expr`s too. It's complicated...)
 
 
 ## Non-final
@@ -54,7 +54,7 @@ attrop: '->' | attrselfop
 attrget: (attrselfop | expr attrop) identifier
 attrset: (attrselfop | expr attrop) assignment
 
-classblock: block | classkeyworddef # XXX FIXME
+classblock: block | classkeyworddef # TODO FIXME
 classargdef: typename? varname ('?' | '+' | '*' | '**' | '=' expr)?
 classkeyworddefargs: classargdef | '(' classargdef (',' classargdef)* ')'
 classkeyworddef: classdefkeyword classkeyworddefargs block
@@ -76,9 +76,6 @@ classkeyworddef: classdefkeyword classkeyworddefargs block
 @inplaceopunpackassignment: varname (',' varname)* [binop '='] expr
 
 @funccall: expr '(' (callargs | callkwargs | callargs ',' callkwargs) ')'
-
-# expression evaluation (only in REPL)
-@replexpr: expr
 
 @conditional: 'if' expr block ('elif' expr block)*
 
@@ -117,7 +114,7 @@ modifier: 'const' | 'static' | 'volatile'
 
 ## Reserved keywords
 
-reserved: 'def' | 'try' | 'catch' | 'except' | 'finally' | 'raise' | 'with' | 'yield' | 'include' | 'using' | 'default'
+reserved: 'try' | 'catch' | 'except' | 'finally' | 'raise' | 'with' | 'yield' | 'include' | 'using' | 'default'
 
 
 ## Identifiers
@@ -165,28 +162,33 @@ unmathop: 'floor' | 'ceil' | 'round' |
           ['exp' 'm1'?] |
           ('ln' | 'lb' | 'lg' | ['log' ('2' | '10' | '1p')]) |
           ['a'? (('sin' | 'cos' | ('tan' | 'tg') | ('cotan' | 'ctg')) 'h'? | 'tan2')]
-unop: unchop | undchop | unkwop | unmathop
+unop: undchop | unchop | unkwop | unmathop
 
 unchpostop: '!'
 undchpostop: '++' | '--' | '**'
-unpostop: unchpostop | undchpostop
+unpostop: undchpostop | unchpostop
 
 binchop: '%' | '&' | '*' | '+' | '-' | '/' | '<' | '=' | '>' | '^' | '|'
 bindchop: '==' | '**' | '//' | '<<' | '>>'
 binkwop: 'is' | 'is not' | 'in' | 'not in' | 'not' | 'and' | 'but' | 'xor' | 'or' | 'isof'
 binmathop: 'pow'
-binop: binchop | bindchop | binkwop | binmathop
+binop: bindchop | binchop | binkwop | binmathop
 
 
 ## Specials
 
 :whitespace: ' ' | \t | \r | \v | \f
 
-:comment: \# | [\# '|'] /.*/ ['|' \#]
+:comment: \#
+
+@blockcomment: [\# '|'] /(.+?)\s*\|\#/ ['|' \#]
 
 :continuation: \\
 
 :special: '..' | ':=' | ',' | '?' | '=' | '(' | ')' | '{' | '}'
+
+# expression evaluation (only in REPL)
+:replexpr: expr
 
 
 # by Sdore, 2021-2022
