@@ -12,22 +12,27 @@ block: code
 
 ## Primitive
 
+# unary operation
 unpreopexpr: unop expr
 unpostopexpr: expr unpostop
 unopexpr: unpreopexpr | unpostopexpr
 
+# binary operation
 binopexpr: expr binop expr
 
-expr: '(' expr ')' | unopexpr | binopexpr | funccall | itemget | attrget | varname | lambda | literal
+# expression
+expr: '(' expr ')' | unopexpr | binopexpr | funccall | itemget | varname | lambda | literal
  # (`f(x+3)` is an instance of `expr`, also `f`, `x+3` and `x` are `expr`s too. It's complicated...)
 
 
 ## Non-final
 
+# left-hand type definition
 typename: modifier* type
 
 vardefassignment: identifier ('=' expr)?
 
+# argument definition
 argdef: typename? identifier ('[' number ']' | '?' | '+' | '*' | '**' | '=' expr)? | '*' | '/'
  # `, /,` — end of positional-only arguments
  # `, *,` — start of keyword-only arguments
@@ -39,6 +44,7 @@ argdef: typename? identifier ('[' number ']' | '?' | '+' | '*' | '**' | '=' expr
  # `arg**` — packs a dict with all leftover keyword arguments
  # `arg=val` — optional argument with a default value
 
+# lambda function
 lambda: '(' (argdef (',' argdef)*)? ')' '->' typename (code | '=' expr)
 
 callarg: '*'? expr
@@ -52,7 +58,6 @@ itemget: expr '[' expr ']' # TODO: slices
 attrselfop: '@.' | '@' | '.' | ':'
 attrop: '->' | attrselfop
 attrget: (attrselfop | expr attrop) identifier
-attrset: (attrselfop | expr attrop) assignment
 
 classblock: block | classkeyworddef # TODO FIXME
 classargdef: typename? varname ('?' | '+' | '*' | '**' | '=' expr)?
@@ -61,10 +66,13 @@ classkeyworddef: classdefkeyword classkeyworddefargs block
 
 ## Final
 
+# function definition
 @funcdef: (typename | 'def') identifier '(' argdef (',' argdef)* ')' (code | '=' expr)
 
+# keyword expression
 @keywordexpr: exprkeyword expr?
 
+# variable definition
 @vardef: typename vardefassignment (',' vardefassignment)*
 
 @assignment: varname '=' expr
@@ -75,6 +83,7 @@ classkeyworddef: classdefkeyword classkeyworddefargs block
 
 @inplaceopunpackassignment: varname (',' varname)* [binop '='] expr
 
+# function call
 @funccall: expr '(' (callargs | callkwargs | callargs ',' callkwargs) ')'
 
 @conditional: 'if' expr block ('elif' expr block)*
@@ -85,17 +94,22 @@ classkeyworddef: classdefkeyword classkeyworddefargs block
 
 @elseclause: 'else' block
 
+# keyword block definition
 @keyworddef: defkeyword block
 
+# class definition
 @classdef: 'class' identifier ('(' identifier (',' identifier)* ')')? '{' classblock '}'
 
 
 ## Keywords
 
+# return from function
 return: 'return' expr
 
+# import module
 import: 'import' (identifier ':')? (identifier '/')* identifier (':' (identifier | '*'))?  # ns:path/to/package:names
 
+# delete variable
 delete: 'delete' varname
 
 assert: 'assert' expr
@@ -110,6 +124,7 @@ classdefkeyword: 'init' | 'constr' | 'property' | 'repr' | 'eq'
 ## Modifiers
 
 modifier: 'const' | 'static' | 'volatile'
+ # `const` — immutable/constant variable
 
 
 ## Reserved keywords
@@ -120,8 +135,9 @@ reserved: 'try' | 'catch' | 'except' | 'finally' | 'raise' | 'with' | 'yield' | 
 ## Identifiers
 
 identifier: /[^\W\d][\w]*/
+ # non-empty sequence of alphanumeric characters plus underscore («_»), not starting with a digit character.
 
-varname: ['.'? identifier]
+varname: attrget | identifier
 
 
 ## Data types
@@ -129,6 +145,24 @@ varname: ['.'? identifier]
 type: ['u'? ('int' | 'float' | 'complex')] |
       [('i' | 'u' | 'u'? ('f' | 'c')) ('8' | '16' | '32' | '64' | '128')] |
       'bool' | 'byte' | 'char' | 'str' | 'void' | 'auto'
+ # `i8`, `i16`, `i32`, `i64`, `i128` — fixed size integer
+ # `u8`, `u16`, `u32`, `u64`, `u128` — fixed size unsigned integer
+ # `f8`, `f16`, `f32`, `f64`, `f128` — fixed size IEEE-754 floating point number
+ # `uf8`, `uf16`, `uf32`, `uf64`, `uf128` — fixed size unsigned floating point number
+ # `c8`, `c16`, `c32`, `c64`, `c128` — fixed size complex number
+ # `uc8`, `uc16`, `uc32`, `uc64`, `uc128` — fixed size unsigned complex number
+ # `int` — unsized («big») integer
+ # `uint` — unsized unsigned integer
+ # `float` — unsized floating point number
+ # `ufloat` — unsized unsigned floating point
+ # `complex` — unsized complex number
+ # `ucomplex` — unsized unsigned complex number
+ # `bool` — logical (boolean) value
+ # `byte` — single byte
+ # `char` — UTF-8 character
+ # `str` — UTF-8 string
+ # `void` — nothing (or anything...)
+ # `auto` — compile-time type deduction based on value
 
 
 ## Literals
@@ -191,5 +225,5 @@ binop: bindchop | binchop | binkwop | binmathop
 :replexpr: expr
 
 
-# by Sdore, 2021-2022
+# by Sdore, 2021-22
 #  slang.sdore.me

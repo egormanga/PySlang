@@ -107,5 +107,5 @@ special: \\ | '..' | ':=' | ',' | '?' | '=' | '(' | ')' | '{' | '}'
 whitespace: ' ' | \t | \r | \v | \f
 
 
-# by Sdore, 2021-2022
+# by Sdore, 2021-22
 #  slang.sdore.me

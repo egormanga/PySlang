@@ -1,119 +1,286 @@
 #!/usr/bin/env python3
 # PySlang AST
 
+from __future__ import annotations
+
+from .lexer import Expr, Lexer, Token
+from typing import Literal
 from utils.nolog import *
 
-class SlException(Exception, Slots): pass
-class SlSyntaxException(SlException): pass
-class SlSyntaxNoToken(SlSyntaxException): pass
-class SlSyntaxEmpty(SlSyntaxNoToken): pass
+def _commasep(x): return (S(', ').join(x) if (isinstance(x, (tuple, list))) else str(x))
 
-class SlSyntaxError(SlSyntaxException):
-	desc: ...
-	srclines: ...
-	lineno: ...
-	offset: ...
-	length: ...
-	char: ...
-	usage: ...
-
-	def __init__(self, desc='Syntax error', srclines=(), *, lineno, offset, length, char=0, scope=None, usage=None):
-		self.desc, self.srclines, self.lineno, self.offset, self.length, self.char, self.usage = (f'\033[2m(in {scope})\033[0m ' if (scope is not None) else '')+desc, srclines, lineno, offset, length, char, usage
+class ASTNode(ABCSlotsInit):
+	lineno: int
+	offset: int
+	length: int
 
 	def __repr__(self):
-		return f"{self.__class__.__name__}({repr(' '.join(map(str.strip, self.desc.split(ENDL))))}, lineno={self.lineno}, offset={self.offset}, length={self.length}, char={self.char})"
+		return f"<{self.__typename__} '{self.__str__()}' on line {self.lineno}, offset {self.offset}>"
 
+	@abc.abstractmethod
 	def __str__(self):
-		l, line = lstripcount(self.srclines[self.lineno-1].partition('\n')[0]) if (self.srclines) else (0, '')
-		offset = (self.offset-l) if (self.offset >= 0) else (len(line)+self.offset+1)
-
-		return f"{self.desc} {self.at}"+(':\n'+\
-			' '*2+'\033[1m'+line[:offset]+'\033[91m'*(self.offset >= 0)+line[offset:]+'\033[0m\n'+\
-			' '*(2+offset)+'\033[95m'+'~'*self.char+'^'+'~'*(self.length-1-self.char)+'\033[0m' if (line) else '') + \
-			(f"\n\n\033[1;95mCaused by:\033[0m\n{self.__cause__ if (isinstance(self.__cause__, SlException)) else ' '+str().join(traceback.format_exception(type(self.__cause__), self.__cause__, self.__cause__.__traceback__))}" if (self.__cause__ is not None) else '')
+		return ''
 
 	@property
-	def at(self):
-		return f"at line {self.lineno}, offset {self.offset}" if (self.offset >= 0) else f"at the end of line {self.lineno}"
-
-class SlSyntaxExpectedError(SlSyntaxError):
-	expected: ...
-	found: ...
-
-	def __init__(self, expected, found, *, lineno, offset, length=0, scope=None, **kwargs):
-		assert (expected != found)
-
-		self.expected, self.found = expected, found
-
-		try: expected = expected.name
-		except AttributeError: pass
-
-		try: found = f"{found.typename} {found}"
-		except AttributeError: pass
-
-		super().__init__(f"Expected {expected},\n{' '*(len(scope)+6 if (scope is not None) else 0)}found {found}", lineno=lineno, offset=offset, length=length, scope=scope, **kwargs)
-
-class SlSyntaxExpectedNothingError(SlSyntaxExpectedError):
-	def __init__(self, found, **kwargs):
-		super().__init__(expected='nothing', found=found, **kwargs)
-
-class SlSyntaxExpectedMoreTokensError(SlSyntaxExpectedError):
-	def __init__(self, for_, *, offset=-1, **kwargs):
-		assert (offset < 0)
-		super().__init__(expected=f"More tokens for {for_}", found='nothing', offset=offset, **kwargs)
-
-class SlSyntaxExpectedOneOfError(SlSyntaxExpectedError):
-	def __init__(self, expected, found='nothing', **kwargs):
-		choices = expected.choices.copy()
-
-		for ii, i in enumerate(choices):
-			try: choices[ii] = i.name
-			except AttributeError: pass
-
-		super().__init__(expected=f"{expected.name} ({S(', ').join(S(choices).uniquize(), last=' or ')})", found=found, **kwargs)
-
-class SlSyntaxMultiExpectedError(SlSyntaxExpectedError):
-	sl: ...
-	errlist: ...
-
-	def __init__(self, expected, found, *, scope=None, errlist=None, **kwargs):
-		self.errlist = errlist
-		self.sl = len(scope)+6 if (scope is not None) else 0
-		super().__init__(
-			expected=S(',\n'+' '*(self.sl+9)).join(Stuple((f"{getattr(i.expected, 'name', i.expected)} at {f'offset {i.offset}' if (i.offset >= 0) else 'the end of line'}" if (not isinstance(i, SlSyntaxMultiExpectedError)) else str(i.expected))+(f' (for {i.usage})' if (i.usage is not None) else '') for i in expected).strip('nothing').uniquize(str.casefold), last=',\n'+' '*(self.sl+6)+'or ') or 'nothing',
-			found=S(',\n'+' '*(self.sl+6)).join(Stuple(f"{getattr(i.found, 'name', i.found)} at {f'offset {i.offset}' if (i.offset >= 0) else 'the end of line'}" if (not isinstance(i, SlSyntaxMultiExpectedError)) else str(i.found) for i in found).strip('nothing').uniquize(str.casefold), last=',\n'+' '*(self.sl+2)+'and ') or 'nothing',
-			#{i.offset+1 if (i.offset < -1) else ''}
-			scope=scope,
-			**kwargs
-		)
-
-	@property
-	def at(self):
-		return f"\n{' '*self.sl}at line {self.lineno}"
+	def __typename__(self):
+		return self.__class__.__name__.removeprefix('AST').removesuffix('Node')
 
 	@classmethod
-	def from_list(cls, err: [SlSyntaxError], scope=None, **kwargs):
-		if (not err): raise ValueError("Error list must not be empty.")
+	def build(cls, t):
+		#print(f"> {cls.__name__}\n")
+		res = dict()
 
-		sl = len(scope)+6 if (scope is not None) else 0
+		annotations = inspect.get_annotations(cls, eval_str=True)
 
-		for i in err:
-			if (isinstance(i, SlSyntaxMultiExpectedError)):
-				i.expected = Sstr(i.expected).indent(sl).lstrip()
-				i.found = Sstr(i.found).indent(sl).lstrip()
+		for i in t.tokens:
+			#if (not isinstance(i, Expr) and i.typename == 'literal'): continue
 
-		lineno = max(i.lineno for i in err)
+			name = i.name
+			#while (isinstance(i, Expr) and i.name == 'expr'):
+			#	assert (len(i.tokens) == 1)
+			#	i = i.tokens[0]
 
-		return cls(
-			expected=sorted(err, key=lambda x: getattr(x.expected, 'name', None) or str(x.expected), reverse=True),
-			found=sorted(err, key=lambda x: x.offset),
-			lineno=lineno,
-			offset=max((i for i in err if i.lineno == lineno), key=lambda x: x.offset if (x.offset >= 0) else inf).offset,
-			length=min((i.length for i in err if i.length), default=0) if (not any(i.offset < 0 for i in err)) else 0,
-			scope=scope,
-			errlist=list(err),
-			**kwargs
-		)
+			#print(i, end='\n\n')
 
-# by Sdore, 2021-2022
+			try: a = annotations[name]
+			except KeyError:
+				try: name, a = first((k, type(first(typing_inspect.get_args(v), default=v))) for k, v in annotations.items() if any(name == repr(j) for j in (typing_inspect.get_args(v) or (v,))))
+				except StopIteration: raise WTFException(cls, name)
+
+			for aa in (typing.get_args(a) or (a,)):
+				aa = first(typing_inspect.get_args(aa), default=aa)
+				if (isinstance(aa, type) and issubclass(aa, ASTNode)):
+					v = aa.build(i)
+					break
+			else:
+				aa = typing.get_args(a)
+				if (typing_inspect.is_literal_type(a) or typing_inspect.is_union_type(a) or isinstance(aa, types.UnionType)):
+					if (i.token not in aa): raise WTFException(cls, i.token) # XXX
+					else: aa = i.token
+				else: aa = first(aa, default=a)
+				if (isinstance(aa, type)): v = aa(i.token)
+				elif (i.token != aa): raise WTFException(cls, i.token) # FIXME: redundant to ^XXX
+				else: v = i.token
+
+			bt = a
+			while (not typing_inspect.is_generic_type(bt)):
+				try: bt = first(typing.get_args(bt))
+				except StopIteration: break
+			bt = (typing_inspect.get_origin(bt) or bt)
+
+			if (isinstance(bt, type) and issubclass(bt, list)):
+				try: l = res[name]
+				except KeyError: l = res[name] = list()
+				if (isinstance(v, list)): l += v
+				else: l.append(v)
+			elif (name in res): raise WTFException(cls, name, v)
+			else: res[name] = v
+
+		#e = None
+		#try:
+		return cls(**res, lineno=t.lineno, offset=t.offset, length=t.length)
+		#except Exception as ex: e = ex; raise
+		#finally:
+		#	if (e is None): print(f"< {cls.__name__}\n")
+
+class ASTPatternNode(ASTNode):
+	@classmethod
+	def build(cls, t):
+		res = re.fullmatch(cls.PATTERN, t.token)[0]
+		return cls(**{first(cls.__annotations__): res}, lineno=t.lineno, offset=t.offset, length=t.length)
+
+	def __str__(self):
+		return f"{getattr(self, first(self.__annotations__))}"
+
+class ASTChoiceNode(ASTNode):
+	@property
+	def value(self):
+		values = tuple(filter(None, (getattr(self, i) for i in self.__annotations__)))
+		if (len(values) != 1): raise WTFException(self, values)
+		return first(values)
+
+	def __str__(self):
+		return f"{self.value}"
+
+	@classmethod
+	def build(cls, t):
+		res = super().build(t)
+		(res.value)
+		return res
+
+class ASTCodeNode(ASTNode):
+	name: str
+	nodes: list
+
+	def __init__(self, name='<code>', nodes=None):
+		if (nodes is None): nodes = []
+		super().__init__(lineno=1, offset=0, length=0)
+		self.name, self.nodes = name, nodes
+
+	def __repr__(self):
+		return f"""<{self.__typename__}{f" '{self.name}'" if (self.name and self.name != '<code>') else ''}>"""
+
+	def __str__(self):
+		return (S('\n').join(map(lambda x: x.join('\n\n') if ('\n' in x) else x, map(str, self.nodes))).indent().replace('\n\n\n', '\n\n').strip('\n').join('\n\n') if (self.nodes) else '').join('{}')
+
+class ASTIdentifierNode(ASTPatternNode):
+	PATTERN = r'[^\W\d][\w]*'
+
+	identifier: str
+
+class ASTVarnameNode(ASTChoiceNode):
+	attrget: ASTAttrgetNode | None
+	identifier: ASTIdentifierNode | None
+
+class ASTBinOpExprNode(ASTNode):
+	expr: list[ASTValueNode]
+	binop: ASTBinOp
+
+	def __str__(self):
+		return f"{self.lhs} {self.binop} {self.rhs}"
+
+	@property
+	def lhs(self):
+		if (len(self.expr) != 2): raise WTFException(self, self.expr)
+		return self.expr[0]
+
+	@property
+	def rhs(self):
+		if (len(self.expr) != 2): raise WTFException(self, self.expr)
+		return self.expr[1]
+
+class ASTValueNode(ASTChoiceNode):
+	binopexpr: ASTBinOpExprNode | None
+	varname: ASTVarnameNode | None
+	literal: ASTLiteralNode | None
+
+class ASTTypenameNode(ASTNode):
+	modifier: list[ASTIdentifierNode] | None
+	type: ASTIdentifierNode
+
+	def __str__(self):
+		return f"{_commasep(self.modifier)+' ' if (self.modifier) else ''}{self.type}"
+
+class ASTVardefAssignmentNode(ASTNode):
+	identifier: ASTIdentifierNode
+	op: Literal['=']
+	expr: ASTValueNode
+
+	def __str__(self):
+		return f"{self.identifier}{f' = {self.expr}' if (self.expr) else ''}"
+
+class ASTCallArgNode(ASTNode):
+	star: Literal['*'] | None
+	expr: ASTValueNode
+
+	def __str__(self):
+		return f"{self.star or ''}{self.expr}"
+
+class ASTCallArgsNode(ASTNode):
+	callarg: list[ASTCallArgNode]
+	_comma: list[','] | None
+
+	def __str__(self):
+		return f"{_commasep(self.callarg)}"
+
+class ASTCallKwargNode(ASTNode):
+	identifier: ASTIdentifierNode | None
+	eq: Literal['=', ':'] | None
+	expr: ASTValueNode
+	star: Literal['**'] | None
+
+	def __str__(self):
+		return f"{self.identifier or ''}{self.eq or ''}{' '*(self.eq == ':')}{self.star or ''}{self.expr}"
+
+class ASTCallKwargsNode(ASTNode):
+	callkwarg: list[ASTCallKwargNode]
+	_comma: list[','] | None
+
+	def __str__(self):
+		return f"{_commasep(self.callkwarg)}"
+
+class ASTAttrSelfOpNode(ASTNode):
+	op: Literal['@.', '@', '.', ':']
+
+	def __str__(self):
+		return f"{self.op}"
+
+class ASTAttrOpNode(ASTChoiceNode):
+	op: Literal['->'] | None
+	attrselfop: ASTAttrSelfOpNode | None
+
+class ASTAttrgetNode(ASTNode):
+	attrselfop: ASTAttrSelfOpNode | None
+	expr: ASTValueNode | None
+	attrop: ASTAttrOpNode | None
+	identifier: ASTIdentifierNode
+
+	def __str__(self):
+		return f"{self.expr or ''}{self.attrop or ''}{self.attrselfop or ''}{self.identifier}"
+
+class ASTVardefNode(ASTNode):
+	typename: ASTTypenameNode
+	vardefassignment: list[ASTVardefAssignmentNode]
+	_comma: list[','] | None
+
+	def __str__(self):
+		return f"{self.typename} {_commasep(self.vardefassignment)}"
+
+class ASTFunccallNode(ASTNode):
+	expr: ASTValueNode
+	_lparen: '('
+	callargs: list[ASTCallArgsNode] | None
+	callkwargs: list[ASTCallKwargsNode] | None
+	_comma: Literal[','] | None
+	_rparen: ')'
+
+	def __str__(self):
+		return f"{self.expr}({_commasep((*(self.callargs or ()), *(self.callkwargs or ())))})"
+
+class ASTLiteralNode(ASTChoiceNode):
+	type: str | None
+	number: int | None
+
+class ASTBinOp(ASTNode):
+	binchop: Literal[Lexer.sldef.definitions.binchop.format.literals]
+
+	def __str__(self):
+		return f"{self.binchop}"
+
+class AST(Slots):
+	code: ASTCodeNode
+	scope: str
+
+	def __init__(self, scope):
+		self.scope = scope
+
+	def __repr__(self):
+		return f"<{self.__typename__} '{self.scope}': {self.code}>"
+
+	def __str__(self):
+		return f"{self.code}"
+
+	@dispatch
+	def add(self, t: Expr):
+		match t.name:
+			case 'expr': self.add(t.token)
+			case 'vardef': self.add(ASTVardefNode.build(t))
+			case 'funccall': self.add(ASTFunccallNode.build(t))
+			case 'blockcomment': pass
+			case _: raise WTFException(t)
+
+	@dispatch
+	def add(self, t: ASTNode):
+		self.code.nodes.append(t)
+
+	@classmethod
+	def build(cls, st, *, scope=''):
+		ast = cls(scope=scope)
+
+		for t in st:
+			ast.add(t)
+
+		return ast
+
+# by Sdore, 2021-22
 #  slang.sdore.me

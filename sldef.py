@@ -258,7 +258,7 @@ class Format(Slots):
 
 	name: str
 	final: bool
-	format: 'TokenList'
+	format: '# TokenList'
 
 	@dispatch
 	def __init__(self, name, final, format: TokenList):
@@ -408,5 +408,5 @@ def main(cargs):
 
 if (__name__ == '__main__'): exit(main())
 
-# by Sdore, 2021-2022
+# by Sdore, 2021-22
 #  slang.sdore.me

@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 # PySlang
 
-from .lexer import *
-from .ast import *
-#from .compilers import *
+from .ast import AST
+from .lexer import Lexer
+from .exceptions import *
 from utils import *
 
+@export
 def compile(src, filename='<string>', *, compiler, optimize=0):
 	try:
 		print(f"Source: {{\n{S(src).indent()}\n}}\n")
 
 		st = Lexer.parse_string(src)
-		print("Source tree:", *st, sep='\n\n', end='\n\n')
+		#print("Source tree:", *st, sep='\n\n', end='\n\n')
 
-		#ast = build_ast(tl, scope=filename.join('""'))
-		#print(f"Abstract syntax tree: {ast.code}\n")
+		ast = AST.build(st, scope=filename.join('""'))
+		print(f"Abstract syntax tree: {ast}\n")
 
 		#print(f"Nodes: {pformat(list(walk_ast_nodes(ast)))}\n")
 
@@ -52,5 +53,5 @@ def main(cargs):
 	#with open(cargs.output or filename.rpartition('.')[0]+compiler.ext, 'wb') as f:
 	#	f.write(code)
 
-# by Sdore, 2021-2022
+# by Sdore, 2021-22
 #  slang.sdore.me
