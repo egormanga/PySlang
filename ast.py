@@ -7,8 +7,6 @@ from .lexer import Expr, Lexer, Token
 from typing import Literal
 from utils.nolog import *
 
-def _commasep(x): return (S(', ').join(x) if (isinstance(x, (tuple, list))) else str(x))
-
 class ASTNode(ABCSlotsInit):
 	lineno: int
 	offset: int
@@ -33,40 +31,44 @@ class ASTNode(ABCSlotsInit):
 		annotations = inspect.get_annotations(cls, eval_str=True)
 
 		for i in t.tokens:
-			#if (not isinstance(i, Expr) and i.typename == 'literal'): continue
+			#print(i, end='\n\n')
 
 			name = i.name
-			#while (isinstance(i, Expr) and i.name == 'expr'):
-			#	assert (len(i.tokens) == 1)
-			#	i = i.tokens[0]
-
-			#print(i, end='\n\n')
+			pattern = None
 
 			try: a = annotations[name]
 			except KeyError:
-				try: name, a = first((k, type(first(typing_inspect.get_args(v), default=v))) for k, v in annotations.items() if any(name == repr(j) for j in (typing_inspect.get_args(v) or (v,))))
+				try:
+					if (i.typename == 'pattern'): pattern = name = repr(name.removeprefix('/').removesuffix('/'))
+				except AssertionError: pass
+				try: name, a = first((k, v) for k, v in annotations.items() if (a := first(typing.get_args(v), default=v) if (typing_inspect.is_optional_type(v) or isinstance(v, types.UnionType)) else v) for j in (a, *typing.get_args(a)) if name == repr(j))
 				except StopIteration: raise WTFException(cls, name)
 
-			for aa in (typing.get_args(a) or (a,)):
-				aa = first(typing_inspect.get_args(aa), default=aa)
-				if (isinstance(aa, type) and issubclass(aa, ASTNode)):
-					v = aa.build(i)
-					break
-			else:
-				aa = typing.get_args(a)
-				if (typing_inspect.is_literal_type(a) or typing_inspect.is_union_type(a) or isinstance(aa, types.UnionType)):
-					if (i.token not in aa): raise WTFException(cls, i.token) # XXX
-					else: aa = i.token
-				else: aa = first(aa, default=a)
-				if (isinstance(aa, type)): v = aa(i.token)
-				elif (i.token != aa): raise WTFException(cls, i.token) # FIXME: redundant to ^XXX
-				else: v = i.token
+			if (typing_inspect.is_optional_type(a)): a = first(typing.get_args(a), default=a)
 
 			bt = a
 			while (not typing_inspect.is_generic_type(bt)):
 				try: bt = first(typing.get_args(bt))
 				except StopIteration: break
 			bt = (typing_inspect.get_origin(bt) or bt)
+
+			while (True):
+				aa = typing.get_args(a)
+				if (not aa): break
+				if (len(aa) > 1): a = aa; break
+				else: a = aa[0]
+
+			for aa in (a if (isiterablenostr(a)) else typing.get_args(a) or (a,)):
+				if (isinstance(aa, type) and not isinstance(aa, types.GenericAlias) and issubclass(aa, ASTNode)):
+					v = aa.build(i)
+					break
+			else:
+				for aa in a if (isiterablenostr(a)) else (a,):
+					if (isinstance(aa, type)): v = aa(i.token)
+					elif (i.token == aa or (pattern is not None and pattern == repr(aa))): v = i.token
+					else: continue
+					break
+				else: raise WTFException(cls, i.token)
 
 			if (isinstance(bt, type) and issubclass(bt, list)):
 				try: l = res[name]
@@ -82,15 +84,6 @@ class ASTNode(ABCSlotsInit):
 		#except Exception as ex: e = ex; raise
 		#finally:
 		#	if (e is None): print(f"< {cls.__name__}\n")
-
-class ASTPatternNode(ASTNode):
-	@classmethod
-	def build(cls, t):
-		res = re.fullmatch(cls.PATTERN, t.token)[0]
-		return cls(**{first(cls.__annotations__): res}, lineno=t.lineno, offset=t.offset, length=t.length)
-
-	def __str__(self):
-		return f"{getattr(self, first(self.__annotations__))}"
 
 class ASTChoiceNode(ASTNode):
 	@property
@@ -108,29 +101,29 @@ class ASTChoiceNode(ASTNode):
 		(res.value)
 		return res
 
+
+## Abstract
+
 class ASTCodeNode(ASTNode):
-	name: str
-	nodes: list
-
-	def __init__(self, name='<code>', nodes=None):
-		if (nodes is None): nodes = []
-		super().__init__(lineno=1, offset=0, length=0)
-		self.name, self.nodes = name, nodes
-
-	def __repr__(self):
-		return f"""<{self.__typename__}{f" '{self.name}'" if (self.name and self.name != '<code>') else ''}>"""
+	lbrace: Literal['{'] | None
+	codesep: list[Literal['\n', ';']] | None
+	statement: list[ASTStatementNode]
+	rbrace: Literal['}'] | None
+	colon: Literal[':'] | None
+	_semicolon: list[';'] | None
 
 	def __str__(self):
-		return (S('\n').join(map(lambda x: x.join('\n\n') if ('\n' in x) else x, map(str, self.nodes))).indent().replace('\n\n\n', '\n\n').strip('\n').join('\n\n') if (self.nodes) else '').join('{}')
+		#return (S('\n').join(map(lambda x: x.join('\n\n') if ('\n' in x) else x, map(str, self.nodes))).indent().replace('\n\n\n', '\n\n').strip('\n').join('\n\n') if (self.nodes) else '').join('{}')
+		return (S('\n').join(self.statement).indent().join((f"{self.lbrace}\n", f"\n{self.rbrace}")) if (self.colon is None) else f"{self.colon} {S('; ').join(self.statement)}")
 
-class ASTIdentifierNode(ASTPatternNode):
-	PATTERN = r'[^\W\d][\w]*'
+class ASTBlockNode(ASTNode):
+	code: ASTCodeNode
 
-	identifier: str
+	def __str__(self):
+		return f"{self.code}"
 
-class ASTVarnameNode(ASTChoiceNode):
-	attrget: ASTAttrgetNode | None
-	identifier: ASTIdentifierNode | None
+
+## Primitive
 
 class ASTBinOpExprNode(ASTNode):
 	expr: list[ASTValueNode]
@@ -150,16 +143,32 @@ class ASTBinOpExprNode(ASTNode):
 		return self.expr[1]
 
 class ASTValueNode(ASTChoiceNode):
+	#unopexpr: ASTUnOpExprNode | None
 	binopexpr: ASTBinOpExprNode | None
+	funccall: ASTFunccallNode | None
+	#itemget: ASTItemgetNode | None
 	varname: ASTVarnameNode | None
+	#lambda: ASTLambdaNode | None
 	literal: ASTLiteralNode | None
+
+class ASTExprNode(ASTNode):
+	_lparen: Literal['('] | None
+	expr: ASTExprNode | None
+	_rparen: Literal[')'] | None
+	value: ASTValueNode | None
+
+	def __str__(self):
+		return f"{f'({self.expr})' if (self.expr is not None) else self.value}"
+
+
+## Non-final
 
 class ASTTypenameNode(ASTNode):
 	modifier: list[ASTIdentifierNode] | None
-	type: ASTIdentifierNode
+	type: ASTTypeNode
 
 	def __str__(self):
-		return f"{_commasep(self.modifier)+' ' if (self.modifier) else ''}{self.type}"
+		return f"{S(', ').join(self.modifier)+' ' if (self.modifier) else ''}{self.type}"
 
 class ASTVardefAssignmentNode(ASTNode):
 	identifier: ASTIdentifierNode
@@ -181,7 +190,7 @@ class ASTCallArgsNode(ASTNode):
 	_comma: list[','] | None
 
 	def __str__(self):
-		return f"{_commasep(self.callarg)}"
+		return f"{S(', ').join(self.callarg)}"
 
 class ASTCallKwargNode(ASTNode):
 	identifier: ASTIdentifierNode | None
@@ -197,7 +206,7 @@ class ASTCallKwargsNode(ASTNode):
 	_comma: list[','] | None
 
 	def __str__(self):
-		return f"{_commasep(self.callkwarg)}"
+		return f"{S(', ').join(self.callkwarg)}"
 
 class ASTAttrSelfOpNode(ASTNode):
 	op: Literal['@.', '@', '.', ':']
@@ -218,13 +227,32 @@ class ASTAttrgetNode(ASTNode):
 	def __str__(self):
 		return f"{self.expr or ''}{self.attrop or ''}{self.attrselfop or ''}{self.identifier}"
 
+## Final
+
+class ASTStatementNode(ASTChoiceNode):
+	comment: ASTCommentNode | None
+	#funcdef: ASTFuncdefNode | None
+	#keywordexpr: ASTKeywordExprNode | None
+	vardef: ASTVardefNode | None
+	#assignment: ASTAssignmentNode | None
+	#inplaceopassignment: ASTInplaceOpAssignmentNode | None
+	#unpackassignment: ASTUnpackAssignmentNode | None
+	#inplaceopunpackassignment: ASTInplaceOpUnpackAssignmentNode | None
+	funccall: ASTFunccallNode | None
+	#conditional: ASTConditionalNode | None
+	#forloop: ASTForLoopNode | None
+	#whileloop: ASTWhileLoopNode | None
+	#elseclause: ASTElseClauseNode | None
+	#keyworddef: ASTKeyworddefNode | None
+	#classdef: ASTClassdefNode | None
+
 class ASTVardefNode(ASTNode):
 	typename: ASTTypenameNode
 	vardefassignment: list[ASTVardefAssignmentNode]
 	_comma: list[','] | None
 
 	def __str__(self):
-		return f"{self.typename} {_commasep(self.vardefassignment)}"
+		return f"{self.typename} {S(', ').join(self.vardefassignment)}"
 
 class ASTFunccallNode(ASTNode):
 	expr: ASTValueNode
@@ -235,11 +263,39 @@ class ASTFunccallNode(ASTNode):
 	_rparen: ')'
 
 	def __str__(self):
-		return f"{self.expr}({_commasep((*(self.callargs or ()), *(self.callkwargs or ())))})"
+		return f"{self.expr}({S(', ').join((*(self.callargs or ()), *(self.callkwargs or ())))})"
+
+
+## Identifiers
+
+class ASTIdentifierNode(ASTNode):
+	identifier: r'[^\W\d][\w]*'
+
+	def __str__(self):
+		return f"{self.identifier}"
+
+class ASTVarnameNode(ASTChoiceNode):
+	attrget: ASTAttrgetNode | None
+	identifier: ASTIdentifierNode | None
+
+
+## Data types
+
+class ASTTypeNode(ASTNode):
+	type: str
+
+	def __str__(self):
+		return f"{self.type}"
+
+
+## Literals
 
 class ASTLiteralNode(ASTChoiceNode):
 	type: str | None
 	number: int | None
+
+
+## Operators
 
 class ASTBinOp(ASTNode):
 	binchop: Literal[Lexer.sldef.definitions.binchop.format.literals]
@@ -247,12 +303,32 @@ class ASTBinOp(ASTNode):
 	def __str__(self):
 		return f"{self.binchop}"
 
-class AST(Slots):
+
+## Comments
+
+class ASTLineCommentNode(ASTNode):
+	lc: '#'
+	comment: r'.*'
+
+	def __str__(self):
+		return f"{self.lc} {self.comment}"
+
+class ASTBlockCommentNode(ASTNode):
+	lbc: '#|'
+	comment: r'(.+?)\s*\|\#'
+	rbc: '|#'
+
+	def __str__(self):
+		return f"{self.lbc} {self.comment} {self.rbc}"
+
+class ASTCommentNode(ASTChoiceNode):
+	linecomment: ASTLineCommentNode | None
+	blockcomment: ASTBlockCommentNode | None
+
+
+class AST(SlotsInit):
 	code: ASTCodeNode
 	scope: str
-
-	def __init__(self, scope):
-		self.scope = scope
 
 	def __repr__(self):
 		return f"<{self.__typename__} '{self.scope}': {self.code}>"
@@ -260,27 +336,10 @@ class AST(Slots):
 	def __str__(self):
 		return f"{self.code}"
 
-	@dispatch
-	def add(self, t: Expr):
-		match t.name:
-			case 'expr': self.add(t.token)
-			case 'vardef': self.add(ASTVardefNode.build(t))
-			case 'funccall': self.add(ASTFunccallNode.build(t))
-			case 'blockcomment': pass
-			case _: raise WTFException(t)
-
-	@dispatch
-	def add(self, t: ASTNode):
-		self.code.nodes.append(t)
-
 	@classmethod
 	def build(cls, st, *, scope=''):
-		ast = cls(scope=scope)
-
-		for t in st:
-			ast.add(t)
-
-		return ast
+		code = ASTCodeNode.build(st)
+		return cls(code=code, scope=scope)
 
 # by Sdore, 2021-22
 #  slang.sdore.me

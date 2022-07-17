@@ -3,9 +3,7 @@
 
 ## Abstract
 
-codesep: \n | ';'
-
-code: '{' codesep* (expr codesep+)* codesep* '}' | ':' expr (';' expr)* ';'?
+code: '{' \n* (statement (\n | ';')+)* \n* '}' | ':' statement (';' statement)* ';'?
 
 block: code
 
@@ -45,7 +43,7 @@ argdef: typename? identifier ('[' number ']' | '?' | '+' | '*' | '**' | '=' expr
  # `arg=val` — optional argument with a default value
 
 # lambda function
-lambda: '(' (argdef (',' argdef)*)? ')' '->' typename (code | '=' expr)
+lambda: '(' (argdef (',' argdef)*)? ')' '->' typename (block | '=' expr)
 
 callarg: '*'? expr
 callargs: callarg (',' callarg)*
@@ -66,39 +64,55 @@ classkeyworddef: classdefkeyword classkeyworddefargs block
 
 ## Final
 
+statement: comment |
+           funcdef |
+           keywordexpr |
+           vardef |
+           assignment |
+           inplaceopassignment |
+           unpackassignment |
+           inplaceopunpackassignment |
+           funccall |
+           conditional |
+           forloop |
+           whileloop |
+           elseclause |
+           keyworddef |
+           classdef
+
 # function definition
-@funcdef: (typename | 'def') identifier '(' argdef (',' argdef)* ')' (code | '=' expr)
+funcdef: (typename | 'def') identifier '(' argdef (',' argdef)* ')' (block | '=' expr)
 
 # keyword expression
-@keywordexpr: exprkeyword expr?
+keywordexpr: exprkeyword expr?
 
 # variable definition
-@vardef: typename vardefassignment (',' vardefassignment)*
+vardef: typename vardefassignment (',' vardefassignment)*
 
-@assignment: varname '=' expr
+assignment: varname '=' expr
 
-@inplaceopassignment: varname [binop '='] expr
+inplaceopassignment: varname [binop '='] expr
 
-@unpackassignment: varname (',' varname)* '=' expr
+unpackassignment: varname (',' varname)* '=' expr
 
-@inplaceopunpackassignment: varname (',' varname)* [binop '='] expr
+inplaceopunpackassignment: varname (',' varname)* [binop '='] expr
 
 # function call
-@funccall: expr '(' (callargs | callkwargs | callargs ',' callkwargs) ')'
+funccall: expr '(' (callargs | callkwargs | callargs ',' callkwargs) ')'
 
-@conditional: 'if' expr block ('elif' expr block)*
+conditional: 'if' expr block ('elif' expr block)*
 
-@forloop: 'for' identifier 'in' expr block
+forloop: 'for' identifier 'in' expr block
 
-@whileloop: 'while' expr block
+whileloop: 'while' expr block
 
-@elseclause: 'else' block
+elseclause: 'else' block
 
 # keyword block definition
-@keyworddef: defkeyword block
+keyworddef: defkeyword block
 
 # class definition
-@classdef: 'class' identifier ('(' identifier (',' identifier)* ')')? '{' classblock '}'
+classdef: 'class' identifier ('(' identifier (',' identifier)* ')')? '{' classblock '}'
 
 
 ## Keywords
@@ -209,13 +223,16 @@ binmathop: 'pow'
 binop: bindchop | binchop | binkwop | binmathop
 
 
+## Comments
+
+linecomment: \# /.*/
+blockcomment: [\# '|'] /(.+?)\s*\|\#/ ['|' \#]
+comment: linecomment | blockcomment
+
+
 ## Specials
 
 :whitespace: ' ' | \t | \r | \v | \f
-
-:comment: \#
-
-@blockcomment: [\# '|'] /(.+?)\s*\|\#/ ['|' \#]
 
 :continuation: \\
 
