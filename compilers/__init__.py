@@ -2,7 +2,7 @@
 # PySlang compilers
 
 import abc
-from ..ast import SlException
+from ..exceptions import SlException
 
 class Compiler(abc.ABC):
 	ext = ''
@@ -21,5 +21,5 @@ class SlCompilationError(SlException):
 	def __exline__(self):
 		return f"Compilation error: {self.desc}"
 
-# by Sdore, 2022
-# slang.sdore.me
+# by Sdore, 2022-24
+#  slang.sdore.me

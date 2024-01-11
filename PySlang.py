@@ -12,12 +12,12 @@ def compile(src, filename='<string>', *, compiler, optimize=0):
 		print(f"Source: {{\n{S(src).indent()}\n}}\n")
 
 		st = Lexer.parse_string(src)
-		#print("Source tree:", *st, sep='\n\n', end='\n\n')
+		print("Source tree:", st, sep='\n\n', end='\n\n')
 
 		ast = AST.build(st, scope=filename.join('""'))
-		print(f"Abstract syntax tree: {ast}\n")
+		print(f"Abstract syntax tree: {{\n{Sstr(ast).indent()}\n}}\n")
 
-		#print(f"Nodes: {pformat(list(walk_ast_nodes(ast)))}\n")
+		#print(f"Nodes: {pprint.pformat(list(walk_ast_nodes(ast)))}\n")
 
 		#if (optimize):
 		#	optimize_ast(ast, validate_ast(ast), optimize)
@@ -25,9 +25,10 @@ def compile(src, filename='<string>', *, compiler, optimize=0):
 		#	#print(f"Optimized Nodes: {pformat(list(walk_ast_nodes(ast)))}\n")
 
 		#ns = validate_ast(ast)
+		ns = {}
 
-		#code = compiler.compile_ast(ast, ns, filename=filename)
-		#print("Compiled.\n")
+		code = compiler.compile_ast(ast, ns, filename=filename)
+		print("Compiled.\n")
 	except SlException as ex:
 		if (not ex.srclines): ex.srclines = src.split('\n')
 		sys.exit(str(ex))
@@ -45,13 +46,13 @@ def main(cargs):
 		argparser.add_argument('-o', dest='output', required=True)
 		cargs = argparser.parse_args()
 
-	compiler = None#importlib.import_module('.compilers.'+cargs.compiler, package=__package__).compiler
+	compiler = importlib.import_module('.compilers.'+cargs.compiler, package=__package__).compiler
 
 	src = cargs.file.read()
 	code = compile(src, filename=filename, compiler=compiler, optimize=cargs.O)
 
-	#with open(cargs.output or filename.rpartition('.')[0]+compiler.ext, 'wb') as f:
-	#	f.write(code)
+	with open(cargs.output or os.path.splitext(os.path.basename(filename))[0]+compiler.ext, 'wb') as f:
+		f.write(code)
 
-# by Sdore, 2021-22
+# by Sdore, 2021-24
 #  slang.sdore.me

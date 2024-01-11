@@ -6,6 +6,10 @@ from .sldef import Format
 from .exceptions import *
 from utils.nolog import *
 
+class singledispatchmethod(functools.singledispatchmethod):
+	def __get__(self, obj, cls=None):
+		return suppress_tb(super().__get__(obj, cls=cls))
+
 def tok(s):
 	try: return first(re.finditer(r'(.+?)(?:\b|$)', s))[1].join("''")
 	except StopIteration: return 'nothing'
@@ -29,11 +33,11 @@ class Token(Slots):
 		return f"""<Token {self.name} of type {self.typename}: '{self.token}' at line {self.lineno}, offset {self.offset}, length {self.length}>"""
 
 	def __str__(self):
-		return f"""\033[1;94m{self.typename.capitalize()}\033[0m \033[1m{self.name}\033[0m \033[2mat line {self.lineno}, offset {self.offset}, length {self.length}\033[0m: '{self.token}'"""
+		return f"""\033[1;94m{self.typename.capitalize()}\033[0m \033[1m{self.name}\033[0m \033[2mat line {self.lineno}, offset {self.offset}, length {self.length}\033[0m: {repr(self.token)}"""
 
 	@property
-	def nlcnt(self):
-		return int(self.token == '\n')
+	def lastpos(self):
+		return (self.lineno, self.offset + self.length)
 
 class Expr(Token):
 	tokens: list
@@ -58,8 +62,8 @@ class Expr(Token):
 		return self.tokens[0].typename
 
 	@property
-	def nlcnt(self):
-		return sum(i.nlcnt for i in self.tokens)
+	def lastpos(self):
+		return max(i.lastpos for i in self.tokens)
 
 @export
 @singleton
@@ -72,148 +76,158 @@ class Lexer(Slots):
 	def lstripspace(self, s):
 		return lstripcount(s, self.definitions.whitespace.format.charset)
 
-	@functools.singledispatchmethod
-	def _parse_token() -> [Expr]: ...
+	@singledispatchmethod
+	def _parse_token(self, token: Format.Token, src: str, *, lineno: int, offset: int, usage: str, was: set) -> [Expr]: ...
 
 	@_parse_token.register
-	def parse_token(self, token: Format.Reference, src, *, lineno, offset, was):
-		if ((place := (lineno, offset, token.name)) in was):
-			if ((*place, True) in was): raise SlSyntaxExpectedNothingError(tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=token.name)
-			was |= {(*place, True)}
-		tl = self.parse_token(self.sldef.definitions[token.name].format, src, lineno=lineno, offset=offset, was=was | {place})
-		return [Expr(tl, name=token.name, lineno=lineno, offset=offset, length=(tl[-1].offset + tl[-1].length - tl[0].offset))]
+	def parse_token(self, token: Format.Reference, src, *, lineno, offset, usage, was):
+		if ((location := (lineno, offset, token.name)) in was):
+			if ((*location, None) in was): raise SlSyntaxExpectedNothingError(tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=token.name)
+			was |= {(*location, None)}
+		tl = self.parse_token(self.sldef.definitions[token.name].format, src, lineno=lineno, offset=offset, usage=token.name, was=(was | {location}))
+		if (not tl): raise SlSyntaxExpectedMoreTokensError(token, lineno=lineno, offset=-1, length=0, usage=token.name)
+
+		assert (tl[0].offset == offset)
+
+		oldlineno = lineno
+		lineno_, offset_ = max(map(operator.attrgetter('lastpos'), tl))
+		nlcnt = (lineno_ - oldlineno)
+		lines = src.split('\n', maxsplit=nlcnt)
+		length = (offset_ + sum(map(len, lines[:-1])) + nlcnt - tl[0].offset)
+
+		#dlog(f"{token} for {usage} at {lineno, offset} {length=}:", *map(str, tl),
+		#	length,
+		#	repr(src[length:]),
+		#sep='\n', end='\n\n')
+
+		return [Expr(tl, name=token.name, lineno=lineno, offset=offset, length=length)]
 
 	@_parse_token.register
-	def parse_token(self, token: Format.Literal, src, *, lineno, offset, was):
-		if (not src.startswith(token.literal)): raise SlSyntaxExpectedError(token, tok(src), lineno=lineno, offset=offset, length=toklen(src))
+	def parse_token(self, token: Format.Literal, src, *, lineno, offset, usage, was):
+		if (not src.startswith(token.literal)): raise SlSyntaxExpectedError(token, tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=usage)
+		assert (token.length == len(token.literal))
 		return [Token(token.literal, name=token.name, typename=token.typename, lineno=lineno, offset=offset, length=token.length)] # TODO: name
 
 	@_parse_token.register
-	def parse_token(self, token: Format.Pattern, src, *, lineno, offset, was):
+	def parse_token(self, token: Format.Pattern, src, *, lineno, offset, usage, was):
 		m = re.match(token.pattern, src)
-		if (m is None): raise SlSyntaxExpectedError(token, tok(src), lineno=lineno, offset=offset, length=toklen(src))
+		if (m is None): raise SlSyntaxExpectedError(token, tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=usage)
 		try: t = m[1]
 		except IndexError: t = m[0]
 		return [Token(t, name=token.name, typename=token.typename, lineno=lineno, offset=offset, length=len(t))]
 
 	@_parse_token.register
-	def parse_token(self, token: Format.Optional, src, *, lineno, offset, was):
-		try: return self.parse_token(token.token, src, lineno=lineno, offset=offset, was=was)
-		except SlSyntaxError: return ()
+	def parse_token(self, token: Format.Optional, src, *, lineno, offset, usage, was):
+		try: return self.parse_token(token.token, src, lineno=lineno, offset=offset, usage=usage, was=was)
+		except SlSyntaxError: return []
 
-	@_parse_token.register
-	def parse_token(self, token: Format.ZeroOrMore, src, *, lineno, offset, was):
-		res = list()
-
-		while (True):
-			try: tl = self.parse_token(token.token, src, lineno=lineno, offset=offset, was=was)
-			except SlSyntaxError: break
-			if (not tl): continue
-			res += tl
-
-			if (nlcnt := sum(i.nlcnt for i in tl)):
-				src = src.split('\n', maxsplit=nlcnt)[-1]
-				lineno += nlcnt
-				offset = 0
-				length = 0
-			else: length = (tl[-1].offset + tl[-1].length - tl[0].offset)
-			ws, src = self.lstripspace(src[length:])
-			offset += (length + ws)
-
-		return res
-
-	@_parse_token.register
-	def parse_token(self, token: Format.OneOrMore, src, *, lineno, offset, was):
+	def _parse_token_list(self, token: Format.TokenList, src, *, lineno, offset, usage, was, _empty=False):
 		res = list()
 		errors = list()
 
-		while (True):
-			try: tl = self.parse_token(token.token, src, lineno=lineno, offset=offset, was=was)
-			except SlSyntaxError as ex: errors.append(ex); break
+		for i in (token.sequence if (isinstance(token, Format.TokenSequence)) else itertools.repeat(token.token)):
+			if (not isinstance(token, Format.TokenSequence) and (_empty or res) and (not src or src.isspace())): break
+
+			try: tl = self.parse_token(i, src, lineno=lineno, offset=offset, usage=usage, was=was)
+			except SlSyntaxError as ex:
+				if (isinstance(token, Format.TokenSequence)): raise
+				errors.append(ex); break
 			if (not tl): continue
 			res += tl
 
-			if (nlcnt := sum(i.nlcnt for i in tl)):
-				src = src.split('\n', maxsplit=nlcnt)[-1]
-				lineno += nlcnt
-				offset = 0
-				length = 0
-			else: length = (tl[-1].offset + tl[-1].length - tl[0].offset)
-			ws, src = self.lstripspace(src[length:])
-			offset += (length + ws)
+			assert (tl[0].offset == offset)
 
-		if (not res):
-			if (errors): raise SlSyntaxMultiExpectedError.from_list(errors, usage=token.name)
-			else: raise SlSyntaxExpectedMoreTokensError(token, lineno=lineno, offset=-1, length=0, usage=token.name)
+			oldlineno, oldoffset = lineno, offset
+			lineno, offset = max(map(operator.attrgetter('lastpos'), tl))
+			nlcnt = (lineno - oldlineno)
+			src = last(src.split('\n', maxsplit=nlcnt))
+			loff = (oldoffset if (nlcnt == 0) else 0)
+			srcoff = (offset - loff)
+			 # - max((i.offset+i.lineno for i in tl if i.lineno == lineno), default=0))
+
+			src_ = src
+			while (offset > (loff + len(first(l := src.partition('\n'))))):
+				src = (l[1] + l[2])
+				lineno += 1
+				offset -= (loff + len(l[0] + l[1]))
+				loff = 0
+			src = src_
+
+			#dlog(f"[…] {i} for {usage}:", *map(str, tl),
+			#	max(map(operator.attrgetter('lastpos'), tl)),
+			#	(oldlineno, oldoffset),
+			#	nlcnt,
+			#	(lineno, offset),
+			#	repr(src),
+			#	srcoff,
+			#	repr(src[srcoff:]),
+			#	self.lstripspace(src[srcoff:]),
+			#sep='\n', end='\n\n')
+			assert (0 <= srcoff <= len(src))
+			ws, src = self.lstripspace(src[srcoff:])
+			offset += ws
+
+			assert (not src[:1].replace('\n', '').isspace())
+
+		if (not _empty and not res):
+			if (errors): raise SlSyntaxMultiExpectedError.from_list(errors, usage=usage)
+			else: raise SlSyntaxExpectedMoreTokensError(token, lineno=lineno, offset=-1, length=0, usage=usage)
+		#elif (errors): dlogexception(SlSyntaxMultiExpectedError.from_list(errors, usage=usage), extra=_empty, end='\n\n')
 
 		return res
 
 	@_parse_token.register
-	def parse_token(self, token: Format.Sequence, src, *, lineno, offset, was):
-		res = list()
-
-		for i in token.sequence:
-			tl = self.parse_token(i, src, lineno=lineno, offset=offset, was=was)
-			if (not tl): continue
-			res += tl
-
-			if (nlcnt := sum(i.nlcnt for i in tl)):
-				src = src.split('\n', maxsplit=nlcnt)[-1]
-				lineno += nlcnt
-				offset = 0
-				length = 0
-			else: length = (tl[-1].offset + tl[-1].length - tl[0].offset)
-			ws, src = self.lstripspace(src[length:])
-			offset += (length + ws)
-
-		return res
+	@suppress_tb
+	def parse_token(self, token: Format.ZeroOrMore, src, *, lineno, offset, usage, was):
+		return self._parse_token_list(token, src, lineno=lineno, offset=offset, usage=usage, was=was, _empty=True)
 
 	@_parse_token.register
-	def parse_token(self, token: Format.Choice, src, *, lineno, offset, was):
+	@suppress_tb
+	def parse_token(self, token: Format.OneOrMore, src, *, lineno, offset, usage, was):
+		return self._parse_token_list(token, src, lineno=lineno, offset=offset, usage=usage, was=was, _empty=False)
+
+	@_parse_token.register
+	def parse_token(self, token: Format.Sequence, src, *, lineno, offset, usage, was):
+		return self._parse_token_list(token, src, lineno=lineno, offset=offset, usage=usage, was=was)
+
+	@_parse_token.register
+	def parse_token(self, token: Format.Choice, src, *, lineno, offset, usage, was):
 		errors = list()
 
 		for i in token.choices:
-			e = None
-			try: return self.parse_token(i, src, lineno=lineno, offset=offset, was=was)
+			try: return self.parse_token(i, src, lineno=lineno, offset=offset, usage=usage, was=was)
 			except SlSyntaxError as ex: e = ex; errors.append(ex)
-			finally:
-				if (e is None): dlog(i, src.join('«»'))
 		else:
-			if (errors): raise SlSyntaxMultiExpectedError.from_list(errors, usage=token.name)
-			else: raise SlSyntaxExpectedOneOfError(token, tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=token.name)
+			if (errors): raise SlSyntaxMultiExpectedError.from_list(errors, usage=usage)
+			else: raise SlSyntaxExpectedOneOfError(token, tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=usage)
 
 	@_parse_token.register
-	def parse_token(self, token: Format.Joint, src, *, lineno, offset, was):
-		res = list()
+	def parse_token(self, token: Format.Joint, src, *, lineno, offset, usage, was):
+		res = self._parse_token_list(token, src, lineno=lineno, offset=offset, usage=usage, was=was)
 
-		for i in token.sequence:
-			tl = self.parse_token(i, src, lineno=lineno, offset=offset, was=was)
-			if (not tl): continue
-			res += tl
-
-			if (nlcnt := sum(i.nlcnt for i in tl)):
-				src = src.split('\n', maxsplit=nlcnt)[-1]
-				lineno += nlcnt
-				offset = 0
-				length = 0
-			else: length = (tl[-1].offset + tl[-1].length - tl[0].offset)
-			ws, src = self.lstripspace(src[length:])
-			offset += (length + ws)
-
-		length = (res[-1].offset + res[-1].length - res[0].offset) # TODO FIXME
+		assert (res[-1].lineno == res[0].lineno)
+		length = (res[-1].offset + res[-1].length - res[0].offset)
 		assert (length == sum(i.length for i in res))
-		return [Token(str().join(i.token for i in res), name=res[-1].name if (len(res) == 1) else token.name, typename=res[-1].typename if (len(res) == 1) else token.typename, lineno=res[0].lineno, offset=res[0].offset, length=length)]
+
+		return [Token(str().join(i.token for i in res), name=(res[-1].name if (len(res) == 1) else token.name), typename=(res[-1].typename if (len(res) == 1) else token.typename), lineno=res[0].lineno, offset=res[0].offset, length=length)]
 
 	parse_token = _parse_token; del _parse_token
 
 	def parse_string(self, src, name='<string>', *, lnooff=0, offset=0):
 		lineno = lnooff+1
-		tl = self.parse_token(self.definitions.code.format, src.rstrip().join(('{\n', '\n}')), lineno=lineno-1, offset=offset, was=set())
-		return Expr(tl, name=name, lineno=lineno, offset=offset, length=sum(i.length for i in tl))
+		token = self.definitions.code.format
+		tl = self.parse_token(token, src.rstrip('\n')+'\n', lineno=lineno, offset=offset, usage=token.name, was=frozenset())
+
+		#if (nlcnt := sum(i.nlcnt for i in tl)): length = (sum((l[-1].offset + l[-1].length) for k, v in itertools.groupby(tl, key=operator.attrgetter('lineno')) if (l := tuple(v))) - tl[0].offset)
+		#else:
+		length = (tl[-1].offset + tl[-1].length - tl[0].offset)
+
+		#if ((leftover := src[length:]) and not leftover.isspace()): raise SlSyntaxExpectedNothingError(tok(leftover), lineno=(lineno + nlcnt), offset=(tl[-1].offset + tl[-1].length if (tl[-1].lineno == lineno + nlcnt) else 0), length=toklen(leftover))
+		return Expr(tl, name=name, lineno=lineno, offset=offset, length=length)
 
 	@property
 	def definitions(self):
 		return self.sldef.definitions
 
-# by Sdore, 2021-22
+# by Sdore, 2021-24
 #  slang.sdore.me

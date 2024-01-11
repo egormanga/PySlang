@@ -25,7 +25,7 @@ class SlSyntaxError(SlSyntaxException):
 
 	def __str__(self):
 		l, line = lstripcount(self.srclines[self.lineno-1].partition('\n')[0]) if (self.srclines) else (0, '')
-		offset = (self.offset-l) if (self.offset >= 0) else (len(line)+self.offset+1)
+		offset = (self.offset-l if (self.offset >= 0) else len(line)+self.offset+1)
 
 		return f"{self.desc} {self.at}"+(':\n'+\
 			' '*2+'\033[1m'+line[:offset]+'\033[91m'*(self.offset >= 0)+line[offset:]+'\033[0m\n'+\
@@ -34,7 +34,7 @@ class SlSyntaxError(SlSyntaxException):
 
 	@property
 	def at(self):
-		return f"at line {self.lineno}, offset {self.offset}" if (self.offset >= 0) else f"at the end of line {self.lineno}"
+		return (f"at line {self.lineno}, offset {self.offset}" if (self.offset >= 0) else f"at the end of line {self.lineno}")
 
 class SlSyntaxExpectedError(SlSyntaxError):
 	expected: ...
@@ -60,7 +60,7 @@ class SlSyntaxExpectedNothingError(SlSyntaxExpectedError):
 class SlSyntaxExpectedMoreTokensError(SlSyntaxExpectedError):
 	def __init__(self, for_, *, offset=-1, **kwargs):
 		assert (offset < 0)
-		super().__init__(expected=f"More tokens for {for_}", found='nothing', offset=offset, **kwargs)
+		super().__init__(expected=f"more tokens for {for_}", found='nothing', offset=offset, **kwargs)
 
 class SlSyntaxExpectedOneOfError(SlSyntaxExpectedError):
 	def __init__(self, expected, found='nothing', **kwargs):
@@ -75,27 +75,29 @@ class SlSyntaxExpectedOneOfError(SlSyntaxExpectedError):
 class SlSyntaxMultiExpectedError(SlSyntaxExpectedError):
 	sl: ...
 	errlist: ...
+	_expected: ...
 
 	def __init__(self, expected, found, *, scope=None, errlist=None, **kwargs):
 		self.errlist = errlist
-		self.sl = len(scope)+6 if (scope is not None) else 0
+		self.sl = (len(scope)+6 if (scope is not None) else 0)
+		self._expected = tuple(j for i in expected for j in (i._expected if (isinstance(i, SlSyntaxMultiExpectedError)) else (i,)))
 		super().__init__(
-			expected=S(',\n'+' '*(self.sl+9)).join(Stuple((f"{getattr(i.expected, 'name', i.expected)} at {f'offset {i.offset}' if (i.offset >= 0) else 'the end of line'}" if (not isinstance(i, SlSyntaxMultiExpectedError)) else str(i.expected))+(f' (for {i.usage})' if (i.usage is not None) else '') for i in expected).strip('nothing').uniquize(str.casefold), last=',\n'+' '*(self.sl+6)+'or ') or 'nothing',
-			found=S(',\n'+' '*(self.sl+6)).join(Stuple(f"{getattr(i.found, 'name', i.found)} at {f'offset {i.offset}' if (i.offset >= 0) else 'the end of line'}" if (not isinstance(i, SlSyntaxMultiExpectedError)) else str(i.found) for i in found).strip('nothing').uniquize(str.casefold), last=',\n'+' '*(self.sl+2)+'and ') or 'nothing',
+			expected = S(',\n'+' '*(self.sl+9)).join(Stuple(f"{S(', ').join(Stuple(getattr(i.expected, 'name', i.expected) for i in choices).uniquize(str.casefold), last=' or ')} at line {lineno}, {f'offset {offset}' if (offset >= 0) else 'the end of line'}" + (f' (for {usage})' if (usage is not None) else '') for (lineno, offset, usage), choices in itertools.groupby(self._expected, key=lambda x: (x.lineno, x.offset, x.usage))).strip('nothing').uniquize(str.casefold), last=',\n'+' '*(self.sl+6)+'or ') or 'nothing', #if (not isinstance(i, SlSyntaxMultiExpectedError)) else str(i.expected)
+			found = S(',\n'+' '*(self.sl+6)).join(Stuple(f"{getattr(i.found, 'name', i.found)} at line {i.lineno}, {f'offset {i.offset}' if (i.offset >= 0) else 'the end of line'}" if (not isinstance(i, SlSyntaxMultiExpectedError)) else str(i.found) for i in found).strip('nothing').uniquize(str.casefold), last=',\n'+' '*(self.sl+2)+'and ') or 'nothing',
 			#{i.offset+1 if (i.offset < -1) else ''}
-			scope=scope,
+			scope = scope,
 			**kwargs
 		)
 
 	@property
 	def at(self):
-		return f"\n{' '*self.sl}at line {self.lineno}"
+		return f"\n{' '*self.sl}at line {self.lineno}, offset {self.offset}"
 
 	@classmethod
 	def from_list(cls, err: [SlSyntaxError], scope=None, **kwargs):
 		if (not err): raise ValueError("Error list must not be empty.")
 
-		sl = len(scope)+6 if (scope is not None) else 0
+		sl = (len(scope)+6 if (scope is not None) else 0)
 
 		for i in err:
 			if (isinstance(i, SlSyntaxMultiExpectedError)):
@@ -105,15 +107,15 @@ class SlSyntaxMultiExpectedError(SlSyntaxExpectedError):
 		lineno = max(i.lineno for i in err)
 
 		return cls(
-			expected=sorted(err, key=lambda x: getattr(x.expected, 'name', None) or str(x.expected), reverse=True),
-			found=sorted(err, key=lambda x: x.offset),
-			lineno=lineno,
-			offset=max((i for i in err if i.lineno == lineno), key=lambda x: x.offset if (x.offset >= 0) else inf).offset,
-			length=min((i.length for i in err if i.length), default=0) if (not any(i.offset < 0 for i in err)) else 0,
-			scope=scope,
-			errlist=list(err),
+			expected = sorted(err, key=lambda x: getattr(x.expected, 'name', None) or str(x.expected), reverse=True),
+			found = sorted(err, key=lambda x: x.offset),
+			lineno = lineno,
+			offset = max((i for i in err if i.lineno == lineno), key=lambda x: x.offset if (x.offset >= 0) else inf).offset,
+			length = min((i.length for i in err if i.length), default=0) if (not any(i.offset < 0 for i in err)) else 0,
+			scope = scope,
+			errlist = list(err),
 			**kwargs
 		)
 
-# by Sdore, 2021-22
+# by Sdore, 2021-24
 #  slang.sdore.me

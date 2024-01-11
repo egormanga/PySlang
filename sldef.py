@@ -290,7 +290,8 @@ class Format(Slots):
 			elif (m := re.fullmatch(r'\\.+', token)): token = cls.Escape(m[0])
 			elif (m == r'\#'): token = cls.Literal('#')
 			elif (m := re.fullmatch(r'''(['"])(.+)\1''', token)): token = cls.Literal(m[2])
-			else: token = cls.Reference(token)
+			elif (token.isidentifier()): token = cls.Reference(token)
+			else: raise ValueError(token)
 
 			format.append(token)
 
@@ -398,5 +399,5 @@ def main(cargs):
 
 if (__name__ == '__main__'): exit(main())
 
-# by Sdore, 2021-22
+# by Sdore, 2021-24
 #  slang.sdore.me

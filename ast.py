@@ -41,7 +41,10 @@ class ASTNode(ABCSlotsInit):
 				try:
 					if (i.typename == 'pattern'): pattern = name = repr(name.removeprefix('/').removesuffix('/'))
 				except AssertionError: pass
-				try: name, a = first((k, v) for k, v in annotations.items() if (a := first(typing.get_args(v), default=v) if (typing_inspect.is_optional_type(v) or isinstance(v, types.UnionType)) else v) for j in (a, *typing.get_args(a)) if name == repr(j))
+				try: name, a = first((k, v) for k, v in annotations.items()
+				                            if (a := first(typing.get_args(v), default=v) if (typing_inspect.is_optional_type(v) or isinstance(v, types.UnionType)) else v)
+				                            for j in (a, *typing.get_args(a), *Stuple(map(typing.get_args, typing.get_args(a))).flatten())
+				                            if name == repr(j))
 				except StopIteration: raise WTFException(cls, name)
 
 			if (typing_inspect.is_optional_type(a)): a = first(typing.get_args(a), default=a)
@@ -105,29 +108,30 @@ class ASTChoiceNode(ASTNode):
 ## Abstract
 
 class ASTCodeNode(ASTNode):
-	lbrace: Literal['{'] | None
-	codesep: list[Literal['\n', ';']] | None
+	_codesep: list[Literal['\n', ';']]
 	statement: list[ASTStatementNode]
+
+	def __str__(self):
+		return S('\n').join(self.statement)
+
+class ASTBlockNode(ASTNode):
+	lbrace: Literal['{'] | None
+	_codesep: list[Literal['\n', ';']] | None # TODO FIXME: empty list instead
+	code: ASTCodeNode | None
 	rbrace: Literal['}'] | None
 	colon: Literal[':'] | None
-	_semicolon: list[';'] | None
+	statement: list[ASTStatementNode] | None # TODO FIXME: empty list instead
 
 	def __str__(self):
 		#return (S('\n').join(map(lambda x: x.join('\n\n') if ('\n' in x) else x, map(str, self.nodes))).indent().replace('\n\n\n', '\n\n').strip('\n').join('\n\n') if (self.nodes) else '').join('{}')
-		return (S('\n').join(self.statement).indent().join((f"{self.lbrace}\n", f"\n{self.rbrace}")) if (self.colon is None) else f"{self.colon} {S('; ').join(self.statement)}")
-
-class ASTBlockNode(ASTNode):
-	code: ASTCodeNode
-
-	def __str__(self):
-		return f"{self.code}"
+		return (Sstr(self.code).indent().join((f"{self.lbrace}\n", f"\n{self.rbrace}")) if (self.colon is None) else f"{self.colon} {S('; ').join(self.statement or ())}")
 
 
 ## Primitive
 
 class ASTBinOpExprNode(ASTNode):
 	expr: list[ASTValueNode]
-	binop: ASTBinOp
+	binop: ASTBinOpNode
 
 	def __str__(self):
 		return f"{self.lhs} {self.binop} {self.rhs}"
@@ -225,7 +229,7 @@ class ASTAttrgetNode(ASTNode):
 	identifier: ASTIdentifierNode
 
 	def __str__(self):
-		return f"{self.expr or ''}{self.attrop or ''}{self.attrselfop or ''}{self.identifier}"
+		return f"{self.attrselfop or ''}{self.expr or ''}{self.attrop or ''}{self.identifier}"
 
 ## Final
 
@@ -243,7 +247,7 @@ class ASTStatementNode(ASTChoiceNode):
 	#forloop: ASTForLoopNode | None
 	#whileloop: ASTWhileLoopNode | None
 	#elseclause: ASTElseClauseNode | None
-	#keyworddef: ASTKeyworddefNode | None
+	keyworddef: ASTKeyworddefNode | None
 	#classdef: ASTClassdefNode | None
 
 class ASTVardefNode(ASTNode):
@@ -264,6 +268,22 @@ class ASTFunccallNode(ASTNode):
 
 	def __str__(self):
 		return f"{self.expr}({S(', ').join((*(self.callargs or ()), *(self.callkwargs or ())))})"
+
+class ASTKeyworddefNode(ASTNode):
+	defkeyword: ASTDefkeywordNode
+	block: ASTBlockNode
+
+	def __str__(self):
+		return f"{self.defkeyword} {self.block}"
+
+
+## Keywords
+
+class ASTDefkeywordNode(ASTNode):
+	keyword: Literal['main', 'exit']
+
+	def __str__(self):
+		return f"{self.keyword}"
 
 
 ## Identifiers
@@ -297,7 +317,7 @@ class ASTLiteralNode(ASTChoiceNode):
 
 ## Operators
 
-class ASTBinOp(ASTNode):
+class ASTBinOpNode(ASTNode):
 	binchop: Literal[Lexer.sldef.definitions.binchop.format.literals]
 
 	def __str__(self):
@@ -341,5 +361,5 @@ class AST(SlotsInit):
 		code = ASTCodeNode.build(st)
 		return cls(code=code, scope=scope)
 
-# by Sdore, 2021-22
+# by Sdore, 2021-24
 #  slang.sdore.me

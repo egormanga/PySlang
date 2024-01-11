@@ -3,9 +3,9 @@
 
 ## Abstract
 
-code: '{' \n* (statement (\n | ';')+)* \n* '}' | ':' statement (';' statement)* ';'?
+code: (statement (\n | ';') \n*)*
 
-block: code
+block: '{' \n* code \n* '}' | ':' statement (';' statement)* ';'?
 
 
 ## Primitive
@@ -20,7 +20,7 @@ binopexpr: expr binop expr
 
 # expression
 expr: '(' expr ')' | unopexpr | binopexpr | funccall | itemget | varname | lambda | literal
- # (`f(x+3)` is an instance of `expr`, also `f`, `x+3` and `x` are `expr`s too. It's complicated...)
+ # E.g.: `f(x+3)` is an instance of `expr`, also `f`, `x+3` and `x` are `expr`s too.
 
 
 ## Non-final
@@ -143,13 +143,17 @@ modifier: 'const' | 'static' | 'volatile'
 
 ## Reserved keywords
 
-reserved: 'try' | 'catch' | 'except' | 'finally' | 'raise' | 'with' | 'yield' | 'include' | 'using' | 'default'
+reserved: 'each' | 'foreach' | 'until' | 'do' |
+          'try' | 'catch' | 'except' | 'finally' | 'raise' | 'throw' |
+          'yield' | 'async' | 'await' |
+          'switch' | 'match' | 'case' |
+          'with' | 'include' | 'using' | 'default'
 
 
 ## Identifiers
 
 identifier: /[^\W\d][\w]*/
- # non-empty sequence of alphanumeric characters plus underscore («_»), not starting with a digit character.
+ # non-empty sequence of alphanumeric characters plus the underscore (`_`), not starting with a digit character.
 
 varname: attrget | identifier
 
@@ -159,23 +163,23 @@ varname: attrget | identifier
 type: ['u'? ('int' | 'float' | 'complex')] |
       [('i' | 'u' | 'u'? ('f' | 'c')) ('8' | '16' | '32' | '64' | '128')] |
       'bool' | 'byte' | 'char' | 'str' | 'void' | 'auto'
- # `i8`, `i16`, `i32`, `i64`, `i128` — fixed size integer
- # `u8`, `u16`, `u32`, `u64`, `u128` — fixed size unsigned integer
- # `f8`, `f16`, `f32`, `f64`, `f128` — fixed size IEEE-754 floating point number
- # `uf8`, `uf16`, `uf32`, `uf64`, `uf128` — fixed size unsigned floating point number
- # `c8`, `c16`, `c32`, `c64`, `c128` — fixed size complex number
- # `uc8`, `uc16`, `uc32`, `uc64`, `uc128` — fixed size unsigned complex number
+ # `i8`, `i16`, `i32`, `i64`, `i128` — fixed-size integer
+ # `u8`, `u16`, `u32`, `u64`, `u128` — fixed-size unsigned integer
+ # `f8`, `f16`, `f32`, `f64`, `f128` — fixed-size IEEE-754 floating point number
+ # `uf8`, `uf16`, `uf32`, `uf64`, `uf128` — fixed-size unsigned floating point number
+ # `c8`, `c16`, `c32`, `c64`, `c128` — fixed-size complex number
+ # `uc8`, `uc16`, `uc32`, `uc64`, `uc128` — fixed-size unsigned complex number
  # `int` — unsized («big») integer
  # `uint` — unsized unsigned integer
  # `float` — unsized floating point number
  # `ufloat` — unsized unsigned floating point
  # `complex` — unsized complex number
  # `ucomplex` — unsized unsigned complex number
- # `bool` — logical (boolean) value
+ # `bool` — binary logical (boolean) value
  # `byte` — single byte
  # `char` — UTF-8 character
  # `str` — UTF-8 string
- # `void` — nothing (or anything...)
+ # `void` — nothing
  # `auto` — compile-time type deduction based on value
 
 
@@ -225,9 +229,9 @@ binop: bindchop | binchop | binkwop | binmathop
 
 ## Comments
 
-linecomment: \# /.*/
 blockcomment: [\# '|'] /(.+?)\s*\|\#/ ['|' \#]
-comment: linecomment | blockcomment
+linecomment: \# /.*/
+comment: blockcomment | linecomment
 
 
 ## Specials
@@ -242,5 +246,5 @@ comment: linecomment | blockcomment
 :replexpr: expr
 
 
-# by Sdore, 2021-22
+# by Sdore, 2021-24
 #  slang.sdore.me
