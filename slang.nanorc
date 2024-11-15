@@ -1,0 +1,68 @@
+# Syntax highlighting for Slang
+
+syntax slang "\.sld?$"
+comment "#"
+
+
+# Numbers
+icolor brightmagenta "\<.?[1-9][0-9.]*(e[0-9]+)?j?\>"
+
+# Boolean
+color brightcyan "\<(true|false)\>"
+
+# Class definition
+color mint "\<class\>\s+\<[_A-Za-z][_A-Za-z0-9]*\>"
+
+# Decorator
+color magenta "@\<[_A-Za-z][_A-Za-z0-9]*\>"
+
+# Keywords
+color lagoon "\<(if|for|in|while|else|class)\>"
+color lagoon "\<(return|break|continue|import|delete|assert|breakpoint)\>"
+color lagoon "\<(main|exit)\>"
+color lagoon "\<(init|constr|repr|eq)\>"
+color lagoon "\<(const|static|volatile|property)\>"
+color lagoon "\<(is|in|not|and|but|xor|or|isof|to)\>"
+
+# Reserved keywords
+color ,red "\<(def|try|catch|except|finally|raise|with|yield)\>"
+
+# Builtin constants
+color magenta "\<(none|null)\>"
+
+# Builtin objects
+color brightblue "\<(stdio|globals)\>(\.\w+)?"
+
+# Builtin types
+color brightgreen "\<([iuf]|uf)(8|16|32|64|128)\>"
+color brightgreen "\<u?(int|float)\>"
+color brightgreen "\<(bool|byte|char|str|void)\>"
+color brightgreen "\<(auto)\>"
+color brightgreen "\<(dict|list|map|object|range|set|tuple)\>"
+
+# String
+color brightyellow start="'" end="'|$"
+color brightyellow start="\"" end="\"|$"
+color brightyellow start="'''" end="'''|$"
+color brightyellow start="\"\"\"" end="\"\"\"|$"
+
+# Char
+color peach "'([^'])'"
+
+# Comments
+color latte "#([^|]|$).*"
+color purple "#!.*"
+color normal start="\|#" end="$"
+color ,red "\|#"
+color purple start="#\|" end="\|#|$"
+color ,red "#\|#"
+color ,red "\|#\|"
+
+# Reminders
+color bold,italic,peach "\<(TODO|FIXME|XXX)\>"
+
+# Trailing whitespace
+color ,green "\s+$"
+
+
+# by Sdore, 2021-24

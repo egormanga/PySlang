@@ -1,8 +1,9 @@
 #| Slang `println' test. |#
 
+stdio.println(1)
+
 main {
-	stdio.println(3)
+	stdio.println(2)
 }
 
-stdio.println(5)
-stdio.println(5)
+stdio.println(3)

@@ -9,7 +9,7 @@ from utils import *
 @export
 def compile(src, filename='<string>', *, compiler, optimize=0):
 	try:
-		print(f"Source: {{\n{S(src).indent()}\n}}\n")
+		print(f"Source: {{\n{'\n'.join(f'\033[1;2;40m{ii:>6} \033[m{i}' for ii, i in enumerate(S(src).indent().split('\n'), 1))}\n}}\n")
 
 		st = Lexer.parse_string(src)
 		print("Source tree:", st, sep='\n\n', end='\n\n')
@@ -37,7 +37,7 @@ def compile(src, filename='<string>', *, compiler, optimize=0):
 @apmain
 @aparg('file', metavar='<file.sl>', type=argparse.FileType('r'))
 @aparg('-o', metavar='output', dest='output')
-@aparg('-f', metavar='compiler', dest='compiler', default='sbc')#required=True)
+@aparg('-c', metavar='compiler', dest='compiler', default='sbc')
 @aparg('-O', metavar='level', help='Code optimization level', type=int)#, default=DEFAULT_OLEVEL)
 def main(cargs):
 	filename = cargs.file.name

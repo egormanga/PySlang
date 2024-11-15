@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<language id="slang" name="Slang" version="2.0" _section="Script">
+<language id="slang" name="Slang" version="2.0" _section="Source">
 	<metadata>
 		<property name="mimetypes">text/x-slang;application/x-slang</property>
 		<property name="globs">*.sl</property>
@@ -152,8 +152,8 @@
 
 		<context id="keywords" style-ref="keyword">
 			<keyword>if</keyword>
+			<keyword>elif</keyword>
 			<keyword>for</keyword>
-			<keyword>in</keyword>
 			<keyword>while</keyword>
 			<keyword>else</keyword>
 			<keyword>class</keyword>
@@ -292,5 +292,5 @@
 	</definitions>
 </language>
 
-<!-- by Sdore, 2021-22
+<!-- by Sdore, 2021-24
       slang.sdore.me -->

@@ -3,38 +3,45 @@
 
 ## Abstract
 
-code: (statement (\n | ';') \n*)*
+code: (statement comment? (\n | ';') \n*)*
+
+classcode: (classstatement comment? (\n | ';') \n*)*
+
+classdefcode: (classdefstatement comment? \n+)*
 
 block: '{' \n* code \n* '}' | ':' statement (';' statement)* ';'?
+
+classblock: '{' \n* classcode \n* '}' | ':' classstatement (';' classstatement)* ';'?
+
+classdefblock: '{' \n* classdefcode \n* '}'
 
 
 ## Primitive
 
-# unary operation
+binopexpr: expr binop expr
+
 unpreopexpr: unop expr
 unpostopexpr: expr unpostop
 unopexpr: unpreopexpr | unpostopexpr
 
-# binary operation
-binopexpr: expr binop expr
-
-# expression
-expr: '(' expr ')' | unopexpr | binopexpr | funccall | itemget | varname | lambda | literal
- # E.g.: `f(x+3)` is an instance of `expr`, also `f`, `x+3` and `x` are `expr`s too.
+value: binopexpr | unopexpr | itemget | funccall | varname | lambda | literal
+expr: value | '(' expr ')'
+ # e.g.: `f(x+3)` is an instance of `expr`, also `f`, `x+3` and `x` are `expr`s too.
 
 
 ## Non-final
 
-# left-hand type definition
-typename: modifier* type
+type: modifier* identifier
 
-vardefassignment: identifier ('=' expr)?
+modifier: 'const' | 'static' | 'volatile'
+ # `const` — immutable/constant variable
 
-# argument definition
-argdef: typename? identifier ('[' number ']' | '?' | '+' | '*' | '**' | '=' expr)? | '*' | '/'
+vardefassignment: identifier ('=' expr | funccallargs)?
+
+argdef: '/' | '*' | type? identifier ('[' integer ']' | '?' | '+' | '*' | '**' | '=' expr)?
  # `, /,` — end of positional-only arguments
  # `, *,` — start of keyword-only arguments
- # in order of positional argument capturing precedence:
+ # in the order of positional argument capturing precedence:
  # `arg[n]` — packs a tuple of `n` values from positional arguments
  # `arg?` — optional argument (start capturing only after all required arguments are fulfilled)
  # `arg+` — packs a tuple with at least one value from leftover positionals (incompatible with `arg*`)
@@ -42,8 +49,9 @@ argdef: typename? identifier ('[' number ']' | '?' | '+' | '*' | '**' | '=' expr
  # `arg**` — packs a dict with all leftover keyword arguments
  # `arg=val` — optional argument with a default value
 
-# lambda function
-lambda: '(' (argdef (',' argdef)*)? ')' '->' typename (block | '=' expr)
+classargdef: type? classvarname ('?' | '+' | '*' | '**' | '=' expr)?
+
+lambda: '(' (argdef (',' argdef)*)? ')' '->' type (block | '=' expr)
 
 callarg: '*'? expr
 callargs: callarg (',' callarg)*
@@ -55,99 +63,104 @@ itemget: expr '[' expr ']' # TODO: slices
 
 attrselfop: '@.' | '@' | '.' | ':'
 attrop: '->' | attrselfop
-attrget: (attrselfop | expr attrop) identifier
+attrget: expr attrop identifier
 
-classblock: block | classkeyworddef # TODO FIXME
-classargdef: typename? varname ('?' | '+' | '*' | '**' | '=' expr)?
-classkeyworddefargs: classargdef | '(' classargdef (',' classargdef)* ')'
-classkeyworddef: classdefkeyword classkeyworddefargs block
+classattrget: (attrselfop | expr attrop) identifier
+
 
 ## Final
 
 statement: comment |
+           reserved |
            funcdef |
            keywordexpr |
-           vardef |
-           assignment |
-           inplaceopassignment |
-           unpackassignment |
-           inplaceopunpackassignment |
-           funccall |
+           classdef |
            conditional |
            forloop |
            whileloop |
-           elseclause |
-           keyworddef |
-           classdef
+           vardef |
+           assignment |
+           funccall |
+           keyworddef
 
-# function definition
-funcdef: (typename | 'def') identifier '(' argdef (',' argdef)* ')' (block | '=' expr)
+classstatement: comment |
+                reserved |
+                funcdef |
+                keywordexpr |
+                conditional |
+                forloop |
+                whileloop |
+                vardef |
+                classassignment |
+                funccall
 
-# keyword expression
-keywordexpr: exprkeyword expr?
+classdefstatement: comment |
+                   reserved |
+                   classfuncdef |
+                   classdef |
+                   vardef |
+                   classkeyworddef
 
-# variable definition
-vardef: typename vardefassignment (',' vardefassignment)*
+funcdef: (type | 'def') identifier '(' (argdef (',' argdef)*)? ')' (block | '=' expr)
 
-assignment: varname '=' expr
+classfuncdef: (type | 'method') identifier '(' (argdef (',' argdef)*)? ')' (classblock | '=' expr)
 
-inplaceopassignment: varname [binop '='] expr
+keywordexpr: return | break | continue | fallthrough | import | delete | assert | super | breakpoint
 
-unpackassignment: varname (',' varname)* '=' expr
+classdef: 'class' identifier ('(' identifier (',' identifier)* ')')? classdefblock
 
-inplaceopunpackassignment: varname (',' varname)* [binop '='] expr
+conditional: 'if' expr block (\n* 'elif' expr block)* (\n* 'else' block)?
 
-# function call
-funccall: expr '(' (callargs | callkwargs | callargs ',' callkwargs) ')'
+forloop: 'for' identifier 'in' expr block (\n* 'else' block)?
 
-conditional: 'if' expr block ('elif' expr block)*
+whileloop: 'while' expr block (\n* 'else' block)?
 
-forloop: 'for' identifier 'in' expr block
+vardef: type vardefassignment (',' vardefassignment)*
 
-whileloop: 'while' expr block
+assignment: varname (',' varname)* [binop? '='] expr
 
-elseclause: 'else' block
+classassignment: classvarname (',' classvarname)* [binop? '='] expr
 
-# keyword block definition
+funccallargs: '(' (callargs (',' callkwargs)? | callkwargs)? ')'
+funccall: expr funccallargs
+
 keyworddef: defkeyword block
 
-# class definition
-classdef: 'class' identifier ('(' identifier (',' identifier)* ')')? '{' classblock '}'
+classkeyworddef: classdefkeyword ('(' (classargdef (',' classargdef)*)? ')')? (classblock | ';')
 
 
 ## Keywords
 
-# return from function
 return: 'return' expr
 
-# import module
+break: 'break' number?
+
+continue: 'continue' number?
+
+fallthrough: 'fallthrough'
+
 import: 'import' (identifier ':')? (identifier '/')* identifier (':' (identifier | '*'))?  # ns:path/to/package:names
 
-# delete variable
 delete: 'delete' varname
 
 assert: 'assert' expr
 
-exprkeyword: return | 'break' | 'continue' | import | delete | assert | 'super' | 'breakpoint'
+super: 'super'
+
+breakpoint: 'breakpoint'
 
 defkeyword: 'main' | 'exit'
 
-classdefkeyword: 'init' | 'constr' | 'property' | 'repr' | 'eq'
+classdefkeyword: 'init' | 'destroy' | 'constr' | 'property' | 'repr' | 'eq' | 'ne' |
+                 [('l' | 'g') ('t' | 'e')]
 
-
-## Modifiers
-
-modifier: 'const' | 'static' | 'volatile'
- # `const` — immutable/constant variable
-
-
-## Reserved keywords
-
-reserved: 'each' | 'foreach' | 'until' | 'do' |
+reserved: 'each' | 'foreach' | 'until' | 'do' | 'repeat' | 'begin' | 'end' |
           'try' | 'catch' | 'except' | 'finally' | 'raise' | 'throw' |
-          'yield' | 'async' | 'await' |
-          'switch' | 'match' | 'case' |
-          'with' | 'include' | 'using' | 'default'
+          'yield' | 'async' | 'await' | 'go' |
+          'switch' | 'match' | 'case' | 'goto' | 'exit' |
+          'with' | 'include' | 'using' | 'default' | 'final' |
+          'public' | 'protected' | 'private' | 'internal' | 'override' | 'overrides' |
+          'extends' | 'implements' | 'interface' | 'struct'
 
 
 ## Identifiers
@@ -157,57 +170,55 @@ identifier: /[^\W\d][\w]*/
 
 varname: attrget | identifier
 
-
-## Data types
-
-type: ['u'? ('int' | 'float' | 'complex')] |
-      [('i' | 'u' | 'u'? ('f' | 'c')) ('8' | '16' | '32' | '64' | '128')] |
-      'bool' | 'byte' | 'char' | 'str' | 'void' | 'auto'
- # `i8`, `i16`, `i32`, `i64`, `i128` — fixed-size integer
- # `u8`, `u16`, `u32`, `u64`, `u128` — fixed-size unsigned integer
- # `f8`, `f16`, `f32`, `f64`, `f128` — fixed-size IEEE-754 floating point number
- # `uf8`, `uf16`, `uf32`, `uf64`, `uf128` — fixed-size unsigned floating point number
- # `c8`, `c16`, `c32`, `c64`, `c128` — fixed-size complex number
- # `uc8`, `uc16`, `uc32`, `uc64`, `uc128` — fixed-size unsigned complex number
- # `int` — unsized («big») integer
- # `uint` — unsized unsigned integer
- # `float` — unsized floating point number
- # `ufloat` — unsized unsigned floating point
- # `complex` — unsized complex number
- # `ucomplex` — unsized unsigned complex number
- # `bool` — binary logical (boolean) value
- # `byte` — single byte
- # `char` — UTF-8 character
- # `str` — UTF-8 string
- # `void` — nothing
- # `auto` — compile-time type deduction based on value
+classvarname: classattrget | identifier
 
 
 ## Literals
 
-number: /[^\D0]\d*/
+boolean: 'true' | 'false'
 
-char: /\\ ([\\'"abefnrtv] | N\{[0-9A-Z\ -]+\} | u[0-9A-Fa-f]{4} | U[0-9A-Fa-f]{8} | x[0-9A-Fa-f]{1,2} | [0-7]{1,3}) | [^\\]/
+decimal: /[^\D0]\d*|0/
+binary: /[0-1]+/
+ternary: /[0-2]+/
+octal: /[0-7]+/
+hexadecimal: /[0-9A-Fa-f]+/
+base36: /[0-9A-Za-z]+/
 
-character: [\' char \']
+integer: decimal |
+         ['0b' binary] |
+         ['0t' ternary] |
+         ['0o' octal] |
+         ['0x' hexadecimal] |
+         ['0a' base36]
 
-string: ['f'? ('"' char* '"' | \' char* \')]
+number: [(decimal \')? integer ('.' ['0'* decimal])?]
 
-list: '[' type (':' expr (',' expr)*)? ']'
+char: /\\ (?:[\\'"abefnrtv] |
+           N\{[0-9A-Z\ -]+\} |
+           u[0-9A-Fa-f]{4} |
+           U[0-9A-Fa-f]{8} |
+           x[0-9A-Fa-f]{1,2} |
+           [0-7]{1,3}) | [^\\'"]/
+
+character: [\' (char | \") \']
+
+string: ['f'? ('"' (char | \')* '"' | \' (char | \")* \')]
 
 tuple: '(' type expr (',' type expr)* ')'
 
-map: '{' expr ':' expr (',' expr ':' expr)* '}'
+list: '[' type (':' expr (',' expr)*)? ']'
 
 set: '{' expr (',' expr)* '}'
 
-literal: number | character | string | list | tuple | map | set
+map: '{' expr ':' expr (',' expr ':' expr)* '}'
+
+literal: boolean | number | character | string | tuple | list | set | map
 
 
 ## Operators
 
-unchop: '!' | '+' | '-' | '~'
 undchop: '++' | '--'
+unchop: '!' | '+' | '-' | '~'
 unkwop: 'not'
 unmathop: 'floor' | 'ceil' | 'round' |
           ['i'? 'sqrt'] |
@@ -220,17 +231,17 @@ unchpostop: '!'
 undchpostop: '++' | '--' | '**'
 unpostop: undchpostop | unchpostop
 
-binchop: '%' | '&' | '*' | '+' | '-' | '/' | '<' | '=' | '>' | '^' | '|'
 bindchop: '==' | '**' | '//' | '<<' | '>>'
-binkwop: 'is' | 'is not' | 'in' | 'not in' | 'not' | 'and' | 'but' | 'xor' | 'or' | 'isof'
+binchop: '%' | '&' | '*' | '+' | '-' | '/' | '<' | '>' | '^' | '|'
+binkwop: 'is' | 'is not' | 'in' | 'not in' | 'isof' | 'and' | 'but' | 'xor' | 'or' | 'to'
 binmathop: 'pow'
 binop: bindchop | binchop | binkwop | binmathop
 
 
 ## Comments
 
-blockcomment: [\# '|'] /(.+?)\s*\|\#/ ['|' \#]
-linecomment: \# /.*/
+blockcomment: [[\# '|'] /.+?(?=\|\#)/ ['|' \#]]
+linecomment: [\# /(?!\|)[^\n]*/]
 comment: blockcomment | linecomment
 
 
@@ -242,8 +253,8 @@ comment: blockcomment | linecomment
 
 :special: '..' | ':=' | ',' | '?' | '=' | '(' | ')' | '{' | '}'
 
-# expression evaluation (only in REPL)
 :replexpr: expr
+ # expression evaluation (only in REPL)
 
 
 # by Sdore, 2021-24

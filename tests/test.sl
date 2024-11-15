@@ -24,10 +24,10 @@ main {
 	int test() = 2*2
 	stdio.println(sum(b, test()))
 
-	for i in (0 to 5): stdio.println(i)
+	for i in (0 to 5) {stdio.println(i);}
 	else: stdio.println(0)
 
 	int i = 5
-	while i: stdio.println(i); i -= 1
+	while i {stdio.println(i); i -= 1;}
 	else: stdio.println('ВСЁ!')
 }

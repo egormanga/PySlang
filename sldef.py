@@ -95,7 +95,7 @@ class Format(Slots):
 			self.token, self.name = token, name
 
 		def __repr__(self):
-			return f"<\033[1;92m{self.__class__.__name__}\033[0m:" + (f"\n{S(repr(self.token)).indent()}\n" if (not isinstance(self.token, str)) else f" \033[95m{repr(self.token)}\033[0m") + ">"
+			return (f"<\033[1;92m{self.__class__.__name__}\033[0m:" + (f"\n{S(repr(self.token)).indent()}\n" if (not isinstance(self.token, str)) else f" \033[95m{self.token.join('//') if (isinstance(self, Format.Pattern)) else repr(self.token)}\033[0m") + ">")
 
 		def flatten(self):
 			self.token = self.token.flatten()
@@ -145,6 +145,10 @@ class Format(Slots):
 		@property
 		def literal(self):
 			return self.token
+
+		@property
+		def literals(self):
+			return (self.literal,)
 
 		@property
 		def length(self):
@@ -243,6 +247,10 @@ class Format(Slots):
 		def append(self, token):
 			self.tokens.append(token)
 
+		def pop(self):
+			if (not self.tokens or not self.tokens[-1]): raise WTFException(self)
+			return self.tokens.pop()
+
 		def flatten(self):
 			tokens = list()
 			for i in self.tokens:
@@ -270,9 +278,9 @@ class Format(Slots):
 		self.format = self.format.flatten()
 
 	@classmethod
-	def parse(cls, name, tokens, *, _group=False):
+	def parse(cls, name, tokens, *, _group=None):
 		if (_group == '['): format, end = cls.Joint([], name=name), ']'
-		else: format, end = cls.Choice([cls.Sequence([], name=name)], name=name), ')'
+		else: format, end = cls.Choice([cls.Sequence([], name=name)], name=name), (')' if (_group == '(') else None)
 
 		while (tokens):
 			token = tokens.pop(0)
@@ -280,8 +288,10 @@ class Format(Slots):
 
 			if (token in ('(', '[')): token = cls.parse(name, tokens, _group=token).format
 			elif (token == '|'):
-				if (not isinstance(format, cls.Choice) or format.tokens[-1].tokens and format.tokens[-1].tokens[-1] == '|'): raise WTFException(token)
-				format.tokens.append(cls.Sequence([], name=name))
+				if (isinstance(format, (cls.Sequence, cls.Joint))): format = cls.Choice([format], name=name)
+				if (not isinstance(format, cls.Choice)): raise WTFException(format, token)
+				if (not format.tokens[-1].tokens or format.tokens[-1].tokens[-1] == '|'): raise WTFException(token)
+				else: format.tokens.append(cls.Sequence([], name=name))
 				continue
 			elif (token == '+'): token = cls.OneOrMore(format.pop(), name=name)
 			elif (token == '*'): token = cls.ZeroOrMore(format.pop(), name=name)
@@ -322,10 +332,10 @@ class SlDef(Slots):
 			if (flatten): format.flatten()
 			return cls(name, format.format, special=special)
 
+	definitions: AttrDict
+
 	def __init__(self, definitions=None):
 		if (definitions is not None): self.definitions |= definitions
-
-	definitions: AttrDict
 
 	@classmethod
 	def parse(cls, src):
@@ -372,12 +382,15 @@ class SlDef(Slots):
 
 @export
 def load(file=DEFAULT_DEF):
-	src = open(file).read()
+	with open(file, 'r') as f:
+		src = f.read()
+
 	sldef = SlDef.build(src)
+
 	return sldef
 
 @apmain
-@aparg('file', metavar='file.sld', nargs='?', default=DEFAULT_DEF)
+@aparg('file', metavar='file.sldef', nargs='?', default=DEFAULT_DEF)
 def main(cargs):
 	sldef = load(cargs.file)
 

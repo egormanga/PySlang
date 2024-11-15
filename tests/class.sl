@@ -4,7 +4,7 @@ class Test {
 	int a = 1
 
 	init {
-		.a = 3
+		.a = 2
 	}
 
 	constr () {
@@ -18,9 +18,9 @@ main {
 	stdio.println(Test.a)  # 1
 
 	Test t
-	stdio.println(t.a)  # 3
-	t.a = 2
 	stdio.println(t.a)  # 2
+	t.a = 3
+	stdio.println(t.a)  # 3
 	delete t
 
 	Test t = Test()
@@ -31,7 +31,7 @@ main {
 	stdio.println(t.a)  # 7
 	delete t
 
-	#Test t(10)
-	#stdio.println(t.a)  # 10
-	#delete t
+	Test t(10)
+	stdio.println(t.a)  # 10
+	delete t
 }

@@ -1,7 +1,7 @@
 #| Slang `colonkw' test. |#
 
-int a(int y) = y
+int f(int x) = x
 
 main {
-	a(y: 3)
+	f(x: 3)
 }

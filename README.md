@@ -7,6 +7,6 @@ It is packed with the best bits taken from all the languages I know of, either a
 For example, C has pretty good (not to say brilliant) language _syntax_ design: just try to count all major C-like languages on your fingers ;).
 Slang, which implements similar syntax, takes it to a whole another level, superpowered by its features.
 
-It _probably_ has its own bad sides, though — yet to figure out (and hopefully, eliminate).
+It _probably_ has its own bad sides, though — yet to figure those out (and hopefully, eliminate).
 
 But **performance** will ever be and **remain a consideration**, least to say.

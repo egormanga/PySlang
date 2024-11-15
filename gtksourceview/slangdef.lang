@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<language id="slangdef" name="Slang definition" version="2.0" _section="Script">
+<language id="slangdef" name="Slang definition" version="2.0" _section="Source">
 	<metadata>
 		<property name="mimetypes">text/x-slangdef;application/x-slangdef</property>
 		<property name="globs">*.sldef</property>
@@ -10,7 +10,7 @@
 	<styles>
 		<style id="comment"		name="Comment"			map-to="def:comment"/>
 		<style id="literal"		name="String"			map-to="def:string"/>
-		<style id="regex"		name="Regular expression"	map-to="def:special-constant"/>
+		<style id="regex"		name="Regular expression"	map-to="def:function"/>
 		<style id="escaped-char"	name="Escaped Character"	map-to="def:special-char"/>
 		<style id="operator"		name="Operator"			map-to="def:operator"/>
 		<style id="special"		name="Special"			map-to="def:special-constant"/>
@@ -93,5 +93,5 @@
 	</definitions>
 </language>
 
-<!-- by Sdore, 2021-22
+<!-- by Sdore, 2021-24
       slang.sdore.me -->

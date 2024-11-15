@@ -84,23 +84,24 @@ class Lexer(Slots):
 		if ((location := (lineno, offset, token.name)) in was):
 			if ((*location, None) in was): raise SlSyntaxExpectedNothingError(tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=token.name)
 			was |= {(*location, None)}
+
 		tl = self.parse_token(self.sldef.definitions[token.name].format, src, lineno=lineno, offset=offset, usage=token.name, was=(was | {location}))
 		if (not tl): raise SlSyntaxExpectedMoreTokensError(token, lineno=lineno, offset=-1, length=0, usage=token.name)
 
 		assert (tl[0].offset == offset)
 
-		oldlineno = lineno
-		lineno_, offset_ = max(map(operator.attrgetter('lastpos'), tl))
-		nlcnt = (lineno_ - oldlineno)
+		oldlineno, oldoffset = lineno, offset
+		lineno, offset = max(map(operator.attrgetter('lastpos'), tl))
+		nlcnt = (lineno - oldlineno)
 		lines = src.split('\n', maxsplit=nlcnt)
-		length = (offset_ + sum(map(len, lines[:-1])) + nlcnt - tl[0].offset)
+		length = (offset + sum(map(len, lines[:-1])) + nlcnt - tl[0].offset)
 
 		#dlog(f"{token} for {usage} at {lineno, offset} {length=}:", *map(str, tl),
 		#	length,
 		#	repr(src[length:]),
 		#sep='\n', end='\n\n')
 
-		return [Expr(tl, name=token.name, lineno=lineno, offset=offset, length=length)]
+		return [Expr(tl, name=token.name, lineno=oldlineno, offset=oldoffset, length=length)]
 
 	@_parse_token.register
 	def parse_token(self, token: Format.Literal, src, *, lineno, offset, usage, was):
@@ -110,7 +111,7 @@ class Lexer(Slots):
 
 	@_parse_token.register
 	def parse_token(self, token: Format.Pattern, src, *, lineno, offset, usage, was):
-		m = re.match(token.pattern, src)
+		m = re.match(token.pattern, src, flags=(re.M | re.S | re.X))
 		if (m is None): raise SlSyntaxExpectedError(token, tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=usage)
 		try: t = m[1]
 		except IndexError: t = m[0]
@@ -119,21 +120,27 @@ class Lexer(Slots):
 	@_parse_token.register
 	def parse_token(self, token: Format.Optional, src, *, lineno, offset, usage, was):
 		try: return self.parse_token(token.token, src, lineno=lineno, offset=offset, usage=usage, was=was)
+		except SlSyntaxExpectedNothingError: raise
 		except SlSyntaxError: return []
 
-	def _parse_token_list(self, token: Format.TokenList, src, *, lineno, offset, usage, was, _empty=False):
+	def _parse_token_list(self, token: Format.TokenList, src, *, lineno, offset, usage, was, _empty=False, _full=False, _stripspace=True):
 		res = list()
 		errors = list()
 
-		for i in (token.sequence if (isinstance(token, Format.TokenSequence)) else itertools.repeat(token.token)):
+		for ii, i in enumerate((token.sequence if (isinstance(token, Format.TokenSequence)) else itertools.repeat(token.token))):
 			if (not isinstance(token, Format.TokenSequence) and (_empty or res) and (not src or src.isspace())): break
 
 			try: tl = self.parse_token(i, src, lineno=lineno, offset=offset, usage=usage, was=was)
+			except SlSyntaxExpectedNothingError:
+				if (isinstance(token, Format.TokenSequence)): break
+				else: raise
 			except SlSyntaxError as ex:
 				if (isinstance(token, Format.TokenSequence)): raise
-				errors.append(ex); break
-			if (not tl): continue
-			res += tl
+				errors.append(ex)
+				break
+			else:
+				if (not tl): continue
+				res += tl
 
 			assert (tl[0].offset == offset)
 
@@ -164,12 +171,15 @@ class Lexer(Slots):
 			#	self.lstripspace(src[srcoff:]),
 			#sep='\n', end='\n\n')
 			assert (0 <= srcoff <= len(src))
-			ws, src = self.lstripspace(src[srcoff:])
-			offset += ws
+			if (ii or _stripspace):
+				ws, src = self.lstripspace(src[srcoff:])
+				offset += ws
+				assert (not src[:1].replace('\n', '').isspace())
+			else: src = src[srcoff:]
 
-			assert (not src[:1].replace('\n', '').isspace())
+		assert (not src[:1].replace('\n', '').isspace())
 
-		if (not _empty and not res):
+		if (not _empty and not res or _full and src and not src.isspace()):
 			if (errors): raise SlSyntaxMultiExpectedError.from_list(errors, usage=usage)
 			else: raise SlSyntaxExpectedMoreTokensError(token, lineno=lineno, offset=-1, length=0, usage=usage)
 		#elif (errors): dlogexception(SlSyntaxMultiExpectedError.from_list(errors, usage=usage), extra=_empty, end='\n\n')
@@ -178,8 +188,8 @@ class Lexer(Slots):
 
 	@_parse_token.register
 	@suppress_tb
-	def parse_token(self, token: Format.ZeroOrMore, src, *, lineno, offset, usage, was):
-		return self._parse_token_list(token, src, lineno=lineno, offset=offset, usage=usage, was=was, _empty=True)
+	def parse_token(self, token: Format.ZeroOrMore, src, *, lineno, offset, usage, was, _full=False):
+		return self._parse_token_list(token, src, lineno=lineno, offset=offset, usage=usage, was=was, _empty=True, _full=_full)
 
 	@_parse_token.register
 	@suppress_tb
@@ -196,14 +206,15 @@ class Lexer(Slots):
 
 		for i in token.choices:
 			try: return self.parse_token(i, src, lineno=lineno, offset=offset, usage=usage, was=was)
-			except SlSyntaxError as ex: e = ex; errors.append(ex)
+			except SlSyntaxError as ex: errors.append(ex)
 		else:
-			if (errors): raise SlSyntaxMultiExpectedError.from_list(errors, usage=usage)
+			#if (errors): raise SlSyntaxMultiExpectedError.from_list(errors, usage=usage)
+			if (errors): raise (first((i for i in errors if i.usage == 'block'), default=None) or SlSyntaxMultiExpectedError.from_list(errors, usage=usage))
 			else: raise SlSyntaxExpectedOneOfError(token, tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=usage)
 
 	@_parse_token.register
 	def parse_token(self, token: Format.Joint, src, *, lineno, offset, usage, was):
-		res = self._parse_token_list(token, src, lineno=lineno, offset=offset, usage=usage, was=was)
+		res = self._parse_token_list(token, src, lineno=lineno, offset=offset, usage=usage, was=was, _stripspace=False)
 
 		assert (res[-1].lineno == res[0].lineno)
 		length = (res[-1].offset + res[-1].length - res[0].offset)
@@ -213,14 +224,14 @@ class Lexer(Slots):
 
 	parse_token = _parse_token; del _parse_token
 
-	def parse_string(self, src, name='<string>', *, lnooff=0, offset=0):
+	def parse_string(self, src, name='<string>', *, lnooff=0, offset=0, live=None):
 		lineno = lnooff+1
 		token = self.definitions.code.format
-		tl = self.parse_token(token, src.rstrip('\n')+'\n', lineno=lineno, offset=offset, usage=token.name, was=frozenset())
+		tl = self.parse_token(token, src.rstrip('\n')+'\n', lineno=lineno, offset=offset, usage=token.name, was=frozenset(), _full=True)
 
 		#if (nlcnt := sum(i.nlcnt for i in tl)): length = (sum((l[-1].offset + l[-1].length) for k, v in itertools.groupby(tl, key=operator.attrgetter('lineno')) if (l := tuple(v))) - tl[0].offset)
 		#else:
-		length = (tl[-1].offset + tl[-1].length - tl[0].offset)
+		length = ((tl[-1].offset + tl[-1].length - tl[0].offset) if (tl) else 0)
 
 		#if ((leftover := src[length:]) and not leftover.isspace()): raise SlSyntaxExpectedNothingError(tok(leftover), lineno=(lineno + nlcnt), offset=(tl[-1].offset + tl[-1].length if (tl[-1].lineno == lineno + nlcnt) else 0), length=toklen(leftover))
 		return Expr(tl, name=name, lineno=lineno, offset=offset, length=length)

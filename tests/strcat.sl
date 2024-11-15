@@ -1,6 +1,6 @@
 #| Slang `strcat' test. |#
 
-str a = "a"
-str b = "B"
+str a = "'"
+str b = '"'
 str c = a+b
 stdio.println(c)

@@ -51,8 +51,8 @@ class Instrs:
 		'//': 'idiv',
 		'%': 'mod',
 		'**': 'pow',
-		'<<': 'ls',
-		'>>': 'rs',
+		'<<': 'sl',
+		'>>': 'sr',
 		'&': 'and',
 		'^': 'xor',
 		'|': 'or',
@@ -68,15 +68,15 @@ class Instrs:
 		'>=': 'ge',
 
 		'is': 'is',
-		'is not': 'isnot',
+		'is not': 'isnt',
 		'in': 'in',
-		'not in': 'notin',
+		'not in': 'nin',
 		'isof': 'isof',
 		'and': 'and',
 		'but': 'and',
 		'xor': 'xor',
 		'or': 'or',
-		'to': 'range',
+		'to': 'to',
 	}
 
 	@init_defaults
@@ -129,7 +129,7 @@ class Instrs:
 
 	@dispatch
 	def add(self, x: ASTCodeNode):
-		for i in x.statement:
+		for i in x.statement or ():
 			self.add(i)
 
 	@dispatch
@@ -235,7 +235,7 @@ class Instrs:
 			self.instrs += f_instrs.instrs
 			self.add(END)
 			self.add(CALL, 0)
-			self.add(POP)
+			#self.add(POP)
 		else: raise NotImplementedError(x.defkeyword)
 
 
@@ -261,7 +261,7 @@ class Instrs:
 
 	## Literals
 	@dispatch
-	def load(self, x: ASTLiteralNode, *, typename=None):
+	def load(self, x: ASTLiteralNode, *, typename):
 		#if (sig is None): sig = Signature.build(x, ns=self.ns)
 
 		#if (hasattr(sig, 'fmt')):
@@ -274,8 +274,9 @@ class Instrs:
 		#	t, v = 'c', eval_literal(x).encode('utf-8') # TODO
 		#else: raise NotImplementedError(sig)
 
-		t = (typename.type.type if (typename is not None) else 'int') # TODO FIXME
-		v = writeVarInt(x.number)
+		t = typename.type.type
+		if (isinstance(x.number, int)): v = writeVarInt(x.number)
+		else: v = str(x.number).encode() # TODO FIXME
 
 		type_ = bytearray(t.encode('ascii'))
 		type_[-1] |= 0x80
