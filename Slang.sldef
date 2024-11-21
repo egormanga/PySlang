@@ -115,6 +115,12 @@ forloop: 'for' identifier 'in' expr block (\n* 'else' block)?
 
 whileloop: 'while' expr block (\n* 'else' block)?
 
+docall: 'do' block catchclause* finallyclause?
+
+catchclause: 'catch' type identifier block
+
+finallyclause: 'finally' block
+
 vardef: type vardefassignment (',' vardefassignment)*
 
 assignment: varname (',' varname)* [binop? '='] expr
@@ -147,6 +153,12 @@ assert: 'assert' expr
 
 super: 'super'
 
+raise: 'raise'
+
+throw: 'throw' expr
+
+resume: 'resume'
+
 breakpoint: 'breakpoint'
 
 defkeyword: 'main' | 'exit'
@@ -154,8 +166,8 @@ defkeyword: 'main' | 'exit'
 classdefkeyword: 'init' | 'destroy' | 'constr' | 'property' | 'repr' | 'eq' | 'ne' |
                  [('l' | 'g') ('t' | 'e')]
 
-reserved: 'each' | 'foreach' | 'until' | 'do' | 'repeat' | 'begin' | 'end' |
-          'try' | 'catch' | 'except' | 'finally' | 'raise' | 'throw' |
+reserved: 'each' | 'foreach' | 'until' | 'repeat' | 'begin' | 'end' |
+          'try' | 'except' |
           'yield' | 'async' | 'await' | 'go' |
           'switch' | 'match' | 'case' | 'goto' | 'exit' |
           'with' | 'include' | 'using' | 'default' | 'final' |
