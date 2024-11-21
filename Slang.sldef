@@ -93,6 +93,7 @@ classstatement: comment |
                 conditional |
                 forloop |
                 whileloop |
+                docall |
                 vardef |
                 classassignment |
                 funccall
