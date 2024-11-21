@@ -67,6 +67,8 @@ attrget: expr attrop identifier
 
 classattrget: (attrselfop | expr attrop) identifier
 
+catchclause: 'catch' type identifier block
+finallyclause: 'finally' block
 
 ## Final
 
@@ -78,6 +80,7 @@ statement: comment |
            conditional |
            forloop |
            whileloop |
+           docall |
            vardef |
            assignment |
            funccall |
@@ -105,7 +108,7 @@ funcdef: (type | 'def') identifier '(' (argdef (',' argdef)*)? ')' (block | '=' 
 
 classfuncdef: (type | 'method') identifier '(' (argdef (',' argdef)*)? ')' (classblock | '=' expr)
 
-keywordexpr: return | break | continue | fallthrough | import | delete | assert | super | breakpoint
+keywordexpr: return | break | continue | fallthrough | import | delete | assert | super | raise | throw | resume | breakpoint
 
 classdef: 'class' identifier ('(' identifier (',' identifier)* ')')? classdefblock
 
@@ -116,10 +119,6 @@ forloop: 'for' identifier 'in' expr block (\n* 'else' block)?
 whileloop: 'while' expr block (\n* 'else' block)?
 
 docall: 'do' block catchclause* finallyclause?
-
-catchclause: 'catch' type identifier block
-
-finallyclause: 'finally' block
 
 vardef: type vardefassignment (',' vardefassignment)*
 
