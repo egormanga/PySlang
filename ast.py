@@ -380,6 +380,23 @@ class ASTClassAttrgetNode(ASTNode):
 	def __str__(self):
 		return f"{self.attrselfop or ''}{self.expr or ''}{self.attrop or ''}{self.identifier}"
 
+class ASTCatchClauseNode(ASTNode):
+	catch: 'catch'
+	type_: ASTTypeNode
+	identifier: ASTIdentifierNode
+	block: ASTBlockNode
+	_nl: list['\n'] | None
+
+	def __str__(self):
+		return f"{self.catch} {self.type_} {self.identifier}{self.block}"
+
+class ASTFinallyClauseNode(ASTNode):
+	finally_: 'finally'
+	block: ASTBlockNode
+	_nl: list['\n'] | None
+
+	def __str__(self):
+		return f"{self.finally_} {self.block}"
 
 ## Final
 
@@ -391,6 +408,7 @@ class ASTStatementNode(ASTChoiceNode):
 	conditional: ASTConditionalNode | None
 	forloop: ASTForLoopNode | None
 	whileloop: ASTWhileLoopNode | None
+	docall: ASTDocallNode | None
 	classdef: ASTClassdefNode | None
 	vardef: ASTVardefNode | None
 	assignment: ASTAssignmentNode | None
@@ -405,6 +423,7 @@ class ASTClassStatementNode(ASTChoiceNode):
 	conditional: ASTConditionalNode | None
 	forloop: ASTForLoopNode | None
 	whileloop: ASTWhileLoopNode | None
+	docall: ASTDocallNode | None
 	vardef: ASTVardefNode | None
 	classassignment: ASTClassAssignmentNode | None
 	funccall: ASTFunccallNode | None
@@ -456,6 +475,9 @@ class ASTKeywordExprNode(ASTChoiceNode):
 	delete: ASTDeleteNode | None
 	#assert_: ASTAssertNode | None
 	#super: ASTSuperNode | None
+        raise_: ASTRaiseNode | None
+	throw: ASTThrowNode | None
+	resume: ASTResumeNode | None
 	#breakpoint: ASTBreakpointNode | None
 
 class ASTConditionalNode(ASTNode):
@@ -490,6 +512,16 @@ class ASTWhileLoopNode(ASTNode):
 
 	def __str__(self):
 		return f"{self.while_} {self.expr}{self.block[0]}{f' {self.else_}{self.block[1]}' if (self.else_) else ''}"
+
+class ASTDocallNode(ASTNode):
+	do_: 'do'
+	block: ASTBlockNode
+	_nl: list['\n'] | None
+	catch: list[ASTCatchClauseNode] | None
+	finally_: ASTFinallyClauseNode | None
+
+	def __str__(self):
+		return f"""{self.do_} {self.block}{f" {S(' ').join(self.catch)}" if (self.catch) else ''}{f" {self.finally_}" if (self.finally_) else ''}"""
 
 class ASTClassdefNode(ASTNode):
 	class_: 'class'
@@ -579,6 +611,26 @@ class ASTDeleteNode(ASTNode):
 
 	def __str__(self):
 		return f"{self.delete} {self.varname}"
+
+class ASTRaiseNode(ASTNode):
+	raise_: 'raise'
+
+	def __str__(self):
+		return f"{self.raise_}"
+
+class ASTThrowNode(ASTNode):
+	throw: 'throw'
+	expr: ASTExprNode
+
+	def __str__(self):
+		return f"{self.throw} {self.expr}"
+
+class ASTResumeNode(ASTNode):
+	resume: 'resume'
+	integer: int | None
+
+	def __str__(self):
+		return f"{self.resume}{f' {self.integer}' if (self.integer) else ''}"
 
 class ASTDefkeywordNode(ASTNode):
 	defkeyword: Literal['main', 'exit']
