@@ -138,9 +138,9 @@ classkeyworddef: classdefkeyword ('(' (classargdef (',' classargdef)*)? ')')? (c
 
 return: 'return' expr
 
-break: 'break' number?
+break: 'break' integer?
 
-continue: 'continue' number?
+continue: 'continue' integer?
 
 fallthrough: 'fallthrough'
 
@@ -156,7 +156,7 @@ raise: 'raise'
 
 throw: 'throw' expr
 
-resume: 'resume'
+resume: 'resume' integer?
 
 breakpoint: 'breakpoint'
 
