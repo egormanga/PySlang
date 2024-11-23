@@ -36,6 +36,10 @@ type: modifier* identifier
 modifier: 'const' | 'static' | 'volatile'
  # `const` — immutable/constant variable
 
+catchclause: 'catch' (type identifier?)? block
+
+finallyclause: 'finally' block
+
 vardefassignment: identifier ('=' expr | funccallargs)?
 
 argdef: '/' | '*' | type? identifier ('[' integer ']' | '?' | '+' | '*' | '**' | '=' expr)?
@@ -78,6 +82,7 @@ statement: comment |
            conditional |
            forloop |
            whileloop |
+           doblock |
            vardef |
            assignment |
            funccall |
@@ -90,6 +95,7 @@ classstatement: comment |
                 conditional |
                 forloop |
                 whileloop |
+                doblock |
                 vardef |
                 classassignment |
                 funccall
@@ -105,7 +111,7 @@ funcdef: (type | 'def') identifier '(' (argdef (',' argdef)*)? ')' (block | '=' 
 
 classfuncdef: (type | 'method') identifier '(' (argdef (',' argdef)*)? ')' (classblock | '=' expr)
 
-keywordexpr: return | break | continue | fallthrough | import | delete | assert | super | breakpoint
+keywordexpr: return | raise | throw | resume | break | continue | fallthrough | import | delete | assert | super | breakpoint
 
 classdef: 'class' identifier ('(' identifier (',' identifier)* ')')? classdefblock
 
@@ -114,6 +120,8 @@ conditional: 'if' expr block (\n* 'elif' expr block)* (\n* 'else' block)?
 forloop: 'for' identifier 'in' expr block (\n* 'else' block)?
 
 whileloop: 'while' expr block (\n* 'else' block)?
+
+doblock: 'do' block (\n* catchclause)* (\n* 'else' block)? (\n* finallyclause)?
 
 vardef: type vardefassignment (',' vardefassignment)*
 
@@ -133,9 +141,15 @@ classkeyworddef: classdefkeyword ('(' (classargdef (',' classargdef)*)? ')')? (c
 
 return: 'return' expr
 
-break: 'break' number?
+raise: 'raise'
 
-continue: 'continue' number?
+throw: 'throw' expr
+
+resume: 'resume' integer?
+
+break: 'break' integer?
+
+continue: 'continue' integer?
 
 fallthrough: 'fallthrough'
 
@@ -154,11 +168,10 @@ defkeyword: 'main' | 'exit'
 classdefkeyword: 'init' | 'destroy' | 'constr' | 'property' | 'repr' | 'eq' | 'ne' |
                  [('l' | 'g') ('t' | 'e')]
 
-reserved: 'each' | 'foreach' | 'until' | 'do' | 'repeat' | 'begin' | 'end' |
-          'try' | 'catch' | 'except' | 'finally' | 'raise' | 'throw' |
+reserved: 'each' | 'foreach' | 'until' | 'repeat' | 'begin' | 'end' |
           'yield' | 'async' | 'await' | 'go' |
-          'switch' | 'match' | 'case' | 'goto' | 'exit' |
-          'with' | 'include' | 'using' | 'default' | 'final' |
+          'try' | 'except' | 'with' | 'switch' | 'match' | 'case' | 'goto' | 'exit' |
+          'include' | 'using' | 'default' | 'final' |
           'public' | 'protected' | 'private' | 'internal' | 'override' | 'overrides' |
           'extends' | 'implements' | 'interface' | 'struct'
 

@@ -25,7 +25,7 @@ color lagoon "\<(const|static|volatile|property)\>"
 color lagoon "\<(is|in|not|and|but|xor|or|isof|to)\>"
 
 # Reserved keywords
-color ,red "\<(def|try|catch|except|finally|raise|with|yield)\>"
+color ,red "\<(each|foreach|until|repeat|begin|end|yield|async|await|go|try|except|with|switch|match|case|goto|exit|include|using|default|final|public|protected|private|internal|override|overrides|extends|implements|interface|struct)\>"
 
 # Builtin constants
 color magenta "\<(none|null)\>"
