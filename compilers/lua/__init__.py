@@ -243,7 +243,7 @@ class Instrs:
 		return f"while {expr if (expr in ('true', 'false')) else f'({expr}):__bool()' if (not expr.startswith('bool(')) else expr.removeprefix('bool(').removesuffix(')')} do{self.add(only(x.block), indent=True)}\tend" # TODO FIXME: `else'
 
 	@dispatch
-	def add(self, x: ASTDoCallNode):
+	def add(self, x: ASTDoBlockNode):
 		return f"do local __success, __error = pcall(function(){self.add(x.block[0], indent=True)}\tend); if not __success then {'; '.join(map(self.add, x.catchclause))}{f'; else{self.add(x.block[1], indent=True)}' if (x.else_) else ''}\tend{f'{self.add(x.finallyclause)}\t' if (x.finallyclause) else ''}if __error then error(__error) end; end"
 
 	@dispatch

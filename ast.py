@@ -411,7 +411,7 @@ class ASTStatementNode(ASTChoiceNode):
 	conditional: ASTConditionalNode | None
 	forloop: ASTForLoopNode | None
 	whileloop: ASTWhileLoopNode | None
-	docall: ASTDoCallNode | None
+	doblock: ASTDoBlockNode | None
 	classdef: ASTClassdefNode | None
 	vardef: ASTVardefNode | None
 	assignment: ASTAssignmentNode | None
@@ -426,7 +426,7 @@ class ASTClassStatementNode(ASTChoiceNode):
 	conditional: ASTConditionalNode | None
 	forloop: ASTForLoopNode | None
 	whileloop: ASTWhileLoopNode | None
-	docall: ASTDoCallNode | None
+	doblock: ASTDoBlockNode | None
 	vardef: ASTVardefNode | None
 	classassignment: ASTClassAssignmentNode | None
 	funccall: ASTFunccallNode | None
@@ -516,7 +516,7 @@ class ASTWhileLoopNode(ASTNode):
 	def __str__(self):
 		return f"{self.while_} {self.expr}{self.block[0]}{f' {self.else_}{self.block[1]}' if (self.else_) else ''}"
 
-class ASTDoCallNode(ASTNode):
+class ASTDoBlockNode(ASTNode):
 	do_: 'do'
 	block: list[ASTBlockNode]
 	_nl: list['\n'] | None

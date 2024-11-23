@@ -82,7 +82,7 @@ statement: comment |
            conditional |
            forloop |
            whileloop |
-           docall |
+           doblock |
            vardef |
            assignment |
            funccall |
@@ -95,7 +95,7 @@ classstatement: comment |
                 conditional |
                 forloop |
                 whileloop |
-                docall |
+                doblock |
                 vardef |
                 classassignment |
                 funccall
@@ -121,7 +121,7 @@ forloop: 'for' identifier 'in' expr block (\n* 'else' block)?
 
 whileloop: 'while' expr block (\n* 'else' block)?
 
-docall: 'do' block (\n* catchclause)* (\n* 'else' block)? (\n* finallyclause)?
+doblock: 'do' block (\n* catchclause)* (\n* 'else' block)? (\n* finallyclause)?
 
 vardef: type vardefassignment (',' vardefassignment)*
 
