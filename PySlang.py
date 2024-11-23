@@ -17,28 +17,26 @@ def compile(src, filename='<string>', *, compiler, optimize=0):
 		ast = AST.build(st, scope=filename.join('""'))
 		print(f"Abstract syntax tree: {{\n{Sstr(ast).indent()}\n}}\n")
 
-		#print(f"Nodes: {pprint.pformat(list(walk_ast_nodes(ast)))}\n")
+		if (optimize):
+			ast.optimize(level=optimize)
+			print(f"Optimized tree: {{\n{Sstr(ast).indent()}\n}}\n")
 
-		#if (optimize):
-		#	optimize_ast(ast, validate_ast(ast), optimize)
-		#	print(f"Optimized: {ast.code}\n")
-		#	#print(f"Optimized Nodes: {pformat(list(walk_ast_nodes(ast)))}\n")
-
-		#ns = validate_ast(ast)
-		ns = {}
+		ns = ast.validate()
 
 		code = compiler.compile_ast(ast, ns, filename=filename)
+
 		print("Compiled.\n")
 	except SlException as ex:
 		if (not ex.srclines): ex.srclines = src.split('\n')
 		sys.exit(str(ex))
-	else: return code
+
+	return code
 
 @apmain
 @aparg('file', metavar='<file.sl>', type=argparse.FileType('r'))
 @aparg('-o', metavar='output', dest='output')
 @aparg('-c', metavar='compiler', dest='compiler', default='sbc')
-@aparg('-O', metavar='level', help='Code optimization level', type=int)#, default=DEFAULT_OLEVEL)
+@aparg('-O', metavar='level', help='Code optimization level', type=int)
 def main(cargs):
 	filename = cargs.file.name
 

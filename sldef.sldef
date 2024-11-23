@@ -1,0 +1,30 @@
+# .sldef syntax definition
+
+code: ((comment | definition comment?) \n+)*
+
+definition: reference ':' expr
+
+expr: choice | optional | zeroormore | oneormore | sequence | joint | reference | literal
+
+choice: expr ('|' expr)*
+
+optional: expr '?'
+
+zeroormore: expr '*'
+
+oneormore: expr '+'
+
+sequence: '(' expr+ ')'
+
+joint: '[' expr+ ']'
+
+reference: /[^\W\d][\w]*/
+
+literal: \' /[^']+/ \'
+
+comment: '#' /.+/
+
+:whitespace: ' ' | \t | \r | \v | \f
+
+# by Sdore, 2024
+# slang.sdore.me

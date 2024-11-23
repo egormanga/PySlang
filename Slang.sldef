@@ -42,7 +42,7 @@ finallyclause: 'finally' block
 
 vardefassignment: identifier ('=' expr | funccallargs)?
 
-argdef: '/' | '*' | type? identifier ('[' integer ']' | '?' | '+' | '*' | '**' | '=' expr)?
+argdef: '/' | '*' | type identifier ('[' integer ']' | '?' | '+' | '*' | '**' | '=' expr)?
  # `, /,` — end of positional-only arguments
  # `, *,` — start of keyword-only arguments
  # in the order of positional argument capturing precedence:
@@ -53,15 +53,17 @@ argdef: '/' | '*' | type? identifier ('[' integer ']' | '?' | '+' | '*' | '**' |
  # `arg**` — packs a dict with all leftover keyword arguments
  # `arg=val` — optional argument with a default value
 
-classargdef: type? classvarname ('?' | '+' | '*' | '**' | '=' expr)?
+classargdef: type classvarname ('?' | '+' | '*' | '**' | '=' expr)?
 
 lambda: '(' (argdef (',' argdef)*)? ')' '->' type (block | '=' expr)
 
 callarg: '*'? expr
 callargs: callarg (',' callarg)*
 
-callkwarg: identifier ('=' | ':') expr | '**' expr
+callkwarg: identifier ('=' | ':') expr | '=' identifier | '**' expr
 callkwargs: callkwarg (',' callkwarg)*
+
+funccallargs: '(' (callargs (',' callkwargs)? | callkwargs)? ')'
 
 itemget: expr '[' expr ']' # TODO: slices
 
@@ -117,7 +119,7 @@ classdef: 'class' identifier ('<' identifier)* classdefblock
 
 conditional: 'if' expr block (\n* 'elif' expr block)* (\n* 'else' block)?
 
-forloop: 'for' identifier 'in' expr block (\n* 'else' block)?
+forloop: 'for' type identifier 'in' expr block (\n* 'else' block)?
 
 whileloop: 'while' expr block (\n* 'else' block)?
 
@@ -129,7 +131,6 @@ assignment: varname (',' varname)* [binop? '='] expr
 
 classassignment: classvarname (',' classvarname)* [binop? '='] expr
 
-funccallargs: '(' (callargs (',' callkwargs)? | callkwargs)? ')'
 funccall: expr funccallargs
 
 keyworddef: defkeyword block

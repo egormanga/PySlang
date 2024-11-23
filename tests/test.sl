@@ -21,10 +21,10 @@ main {
 	b *= 2
 	stdio.println(not a)
 	stdio.println(a, b, c)
-	int test() = 2*2
+	int test() = 2*z
 	stdio.println(sum(b, test()))
 
-	for i in (0 to 5) {stdio.println(i);}
+	for int i in (0 to 5) {stdio.println(i);}
 	else: stdio.println(0)
 
 	int i = 5

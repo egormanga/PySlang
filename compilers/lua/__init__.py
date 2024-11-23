@@ -194,6 +194,10 @@ class Instrs:
 		return ', '.join(map(self.load, x.callarg))
 
 	@dispatch
+	def load(self, x: ASTFunccallArgsNode):
+		return f"({', '.join(map(self.load, (x.callargs or ())))})"
+
+	@dispatch
 	def load(self, x: ASTAttrgetNode, *, funccall=None):
 		op = x.attrop.attrselfop.op
 		if (op != '.'): raise NotImplementedError(x)
@@ -270,10 +274,6 @@ class Instrs:
 		classvarname = tuple(map(self.load, x.classvarname))
 		inplaceop = x.assignment.removesuffix('=')
 		return f"{', '.join(classvarname)} = {f'({only(classvarname)} {inplaceop} ' if (inplaceop) else ''}{self.load(x.expr)}{')'*bool(inplaceop)}"
-
-	@dispatch
-	def load(self, x: ASTFunccallArgsNode):
-		return f"({', '.join(map(self.load, (x.callargs or ())))})"
 
 	@dispatch
 	def add(self, x: ASTFunccallNode):

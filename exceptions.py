@@ -3,12 +3,7 @@
 
 from utils.nolog import *
 
-class SlException(Exception, Slots): pass
-class SlSyntaxException(SlException): pass
-class SlSyntaxNoToken(SlSyntaxException): pass
-class SlSyntaxEmpty(SlSyntaxNoToken): pass
-
-class SlSyntaxError(SlSyntaxException):
+class SlException(Exception, Slots):
 	desc: ...
 	srclines: ...
 	lineno: ...
@@ -17,24 +12,40 @@ class SlSyntaxError(SlSyntaxException):
 	char: ...
 	usage: ...
 
-	def __init__(self, desc='Syntax error', srclines=(), *, lineno, offset, length, char=0, scope=None, usage=None):
-		self.desc, self.srclines, self.lineno, self.offset, self.length, self.char, self.usage = (f'\033[2m(in {scope})\033[0m ' if (scope is not None) else '')+desc, srclines, lineno, offset, length, char, usage
+	def __init__(self, desc, *args, lineno, offset, length, char=0, scope=None, usage=None, srclines=()):
+		self.desc, self.lineno, self.offset, self.length, self.char, self.usage, self.srclines = f"{f'\033[2m(in {scope})\033[0m ' if (scope is not None) else ''}{desc}", lineno, offset, length, char, usage, srclines
+		super().__init__(*args)
 
 	def __repr__(self):
-		return f"{self.__class__.__name__}({repr(' '.join(map(str.strip, self.desc.split(ENDL))))}, lineno={self.lineno}, offset={self.offset}, length={self.length}, char={self.char})"
+		return f"""{self.__class__.__name__}({self.__repr_args__()}{f", {S(', ').join(self.args)}" if (self.args) else ''})"""
+
+	def __repr_args__(self):
+		return f"{' '.join(map(str.strip, self.desc.split('\n')))!r}, lineno={self.lineno}, offset={self.offset}, length={self.length}, char={self.char}"
 
 	def __str__(self):
 		l, line = (lstripcount(self.srclines[self.lineno-1].partition('\n')[0]) if (self.srclines) else (0, ''))
 		offset = (self.offset-l if (self.offset >= 0) else len(line)+self.offset+1)
 
-		return f"{self.desc}{self.at}"+(':\n'+\
+		return f"""{self.desc}{f" ({S(', ').join(self.args)})" if (self.args) else ''}{self.at}"""+(':\n'+\
 			' '*2+'\033[1m'+line[:offset]+'\033[91m'*(self.offset >= 0)+line[offset:]+'\033[0m\n'+\
-			' '*(2+offset)+'\033[95m'+'~'*self.char+'^'+'~'*(self.length-1-self.char)+'\033[0m' if (line) else '') + \
+			' '*(2+offset)+'\033[95m'+'~'*self.char+'^'+'~'*(min(self.length, len(line)-offset)-1 - self.char)+'\033[0m' if (line) else '') + \
 			(f"\n\n\033[1;95mCaused by:\033[0m\n{self.__cause__ if (isinstance(self.__cause__, SlException)) else ' '+str().join(traceback.format_exception(type(self.__cause__), self.__cause__, self.__cause__.__traceback__))}" if (self.__cause__ is not None) else '')
 
 	@property
 	def at(self):
 		return (f" at line {self.lineno}, offset {self.offset}" if (self.offset >= 0) else f" at the end of line {self.lineno}")
+
+	@classmethod
+	def from_node(cls, node, *args, **kwargs):
+		return cls(*args, **setdefault(kwargs, lineno=node.lineno, offset=node.offset, length=node.length))
+
+class SlSyntaxException(SlException): pass
+class SlSyntaxNoToken(SlSyntaxException): pass
+class SlSyntaxEmpty(SlSyntaxNoToken): pass
+
+class SlSyntaxError(SlSyntaxException):
+	def __init__(self, desc="Syntax error", *args, **kwargs):
+		super().__init__(desc, *args, **kwargs)
 
 class SlSyntaxExpectedError(SlSyntaxError):
 	expected: ...
@@ -116,6 +127,11 @@ class SlSyntaxMultiExpectedError(SlSyntaxExpectedError):
 			errlist = list(err),
 			**kwargs
 		)
+
+class SlValidationException(SlException): pass
+class SlValidationError(SlValidationException):
+	def __init__(self, desc="Validation error", *args, **kwargs):
+		super().__init__(desc, *args, **kwargs)
 
 # by Sdore, 2021-24
 #  slang.sdore.me
