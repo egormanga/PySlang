@@ -36,6 +36,10 @@ type: modifier* identifier
 modifier: 'const' | 'static' | 'volatile'
  # `const` — immutable/constant variable
 
+catchclause: 'catch' (type identifier?)? block
+
+finallyclause: 'finally' block
+
 vardefassignment: identifier ('=' expr | funccallargs)?
 
 argdef: '/' | '*' | type? identifier ('[' integer ']' | '?' | '+' | '*' | '**' | '=' expr)?
@@ -67,8 +71,6 @@ attrget: expr attrop identifier
 
 classattrget: (attrselfop | expr attrop) identifier
 
-catchclause: 'catch' type identifier block
-finallyclause: 'finally' block
 
 ## Final
 
@@ -109,7 +111,7 @@ funcdef: (type | 'def') identifier '(' (argdef (',' argdef)*)? ')' (block | '=' 
 
 classfuncdef: (type | 'method') identifier '(' (argdef (',' argdef)*)? ')' (classblock | '=' expr)
 
-keywordexpr: return | break | continue | fallthrough | import | delete | assert | super | raise | throw | resume | breakpoint
+keywordexpr: return | raise | throw | resume | break | continue | fallthrough | import | delete | assert | super | breakpoint
 
 classdef: 'class' identifier ('(' identifier (',' identifier)* ')')? classdefblock
 
@@ -119,7 +121,7 @@ forloop: 'for' identifier 'in' expr block (\n* 'else' block)?
 
 whileloop: 'while' expr block (\n* 'else' block)?
 
-docall: 'do' block catchclause* finallyclause?
+docall: 'do' block (\n* catchclause)* (\n* 'else' block)? (\n* finallyclause)?
 
 vardef: type vardefassignment (',' vardefassignment)*
 
@@ -139,6 +141,12 @@ classkeyworddef: classdefkeyword ('(' (classargdef (',' classargdef)*)? ')')? (c
 
 return: 'return' expr
 
+raise: 'raise'
+
+throw: 'throw' expr
+
+resume: 'resume' integer?
+
 break: 'break' integer?
 
 continue: 'continue' integer?
@@ -153,12 +161,6 @@ assert: 'assert' expr
 
 super: 'super'
 
-raise: 'raise'
-
-throw: 'throw' expr
-
-resume: 'resume' integer?
-
 breakpoint: 'breakpoint'
 
 defkeyword: 'main' | 'exit'
@@ -167,10 +169,9 @@ classdefkeyword: 'init' | 'destroy' | 'constr' | 'property' | 'repr' | 'eq' | 'n
                  [('l' | 'g') ('t' | 'e')]
 
 reserved: 'each' | 'foreach' | 'until' | 'repeat' | 'begin' | 'end' |
-          'try' | 'except' |
           'yield' | 'async' | 'await' | 'go' |
-          'switch' | 'match' | 'case' | 'goto' | 'exit' |
-          'with' | 'include' | 'using' | 'default' | 'final' |
+          'try' | 'except' | 'with' | 'switch' | 'match' | 'case' | 'goto' | 'exit' |
+          'include' | 'using' | 'default' | 'final' |
           'public' | 'protected' | 'private' | 'internal' | 'override' | 'overrides' |
           'extends' | 'implements' | 'interface' | 'struct'
 

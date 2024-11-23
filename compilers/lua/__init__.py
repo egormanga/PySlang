@@ -88,7 +88,7 @@ class Instrs:
 	@dispatch
 	def add(self, x: ASTBlockNode, indent=False):
 		linestart = ('\n\t' + '\t'*indent)
-		if (x.code is not None):
+		if (x.code):
 			assert (not x.statement)
 			return (linestart + self.add(x.code, indent=(indent+1)) + '\n')
 		else: return (linestart + linestart.join(map(self.add, x.statement)) + '\n')
@@ -96,7 +96,7 @@ class Instrs:
 	@dispatch
 	def add(self, x: ASTClassBlockNode, *, indent=False):
 		linestart = ('\n\t' + '\t'*indent)
-		if (x.classcode is not None):
+		if (x.classcode):
 			assert (not x.classstatement)
 			return (linestart + self.add(x.classcode, indent=(indent+1)) + '\n')
 		else: return (linestart + linestart.join(map(self.add, x.classstatement)) + '\n')
@@ -148,6 +148,14 @@ class Instrs:
 	@dispatch
 	def load(self, x: ASTTypeNode):
 		return self.load(x.identifier)
+
+	@dispatch
+	def add(self, x: ASTCatchClauseNode):
+		return f"if {f'type(__error) == {self.load(x.type_)}' if (x.type_) else '__error'} then{f' local {self.load(x.identifier)} = __error;' if (x.identifier) else ''} __error_, __error = __error, nil{self.add(x.block, indent=True)}\tend"
+
+	@dispatch
+	def add(self, x: ASTFinallyClauseNode):
+		return self.add(x.block)
 
 	@dispatch
 	def load(self, x: ASTVardefAssignmentNode, *, type_: ASTTypeNode, classname=None):
@@ -231,9 +239,12 @@ class Instrs:
 
 	@dispatch
 	def add(self, x: ASTWhileLoopNode):
-		assert (len(x.block) == 1)
 		expr = self.load(x.expr)
 		return f"while {expr if (expr in ('true', 'false')) else f'({expr}):__bool()' if (not expr.startswith('bool(')) else expr.removeprefix('bool(').removesuffix(')')} do{self.add(only(x.block), indent=True)}\tend" # TODO FIXME: `else'
+
+	@dispatch
+	def add(self, x: ASTDoCallNode):
+		return f"do local __success, __error = pcall(function(){self.add(x.block[0], indent=True)}\tend); if not __success then {'; '.join(map(self.add, x.catchclause))}{f'; else{self.add(x.block[1], indent=True)}' if (x.else_) else ''}\tend{f'{self.add(x.finallyclause)}\t' if (x.finallyclause) else ''}if __error then error(__error) end; end"
 
 	@dispatch
 	def add(self, x: ASTClassdefNode):
@@ -292,6 +303,10 @@ class Instrs:
 	## Keywords
 
 	@dispatch
+	def add(self, x: ASTRaiseNode):
+		return "__error = __error_"
+
+	@dispatch
 	def add(self, x: ASTDeleteNode):
 		varname = self.load(x.varname)
 		return f"pcall({varname}.destroy, {varname}); {varname} = nil"
@@ -305,7 +320,7 @@ class Instrs:
 
 	@dispatch
 	def load(self, x: ASTVarnameNode, *, funccall=None):
-		if (x.attrget is not None): return self.load(x.attrget, funccall=funccall)
+		if (x.attrget): return self.load(x.attrget, funccall=funccall)
 		else: return self.load(x.identifier)
 
 	@dispatch

@@ -86,7 +86,7 @@ class ASTNode(ABCSlotsInit):
 				if (isinstance(aa, type) and not isinstance(aa, types.GenericAlias) and issubclass(aa, ASTNode)):
 					v = aa.build(i)
 				elif (isinstance(aa, type)):
-					try: v = aa(i.token)
+					try: v = aa(i.token, *((0,) if (aa is int) else ()))
 					except Exception as e: ex = e; continue
 				elif (i.token == aa or (pattern is not None and pattern == repr(aa))):
 					v = i.token
@@ -196,7 +196,7 @@ class ASTBlockNode(ASTNode):
 		#return (S('\n').join(map(lambda x: x.join('\n\n') if ('\n' in x) else x, map(str, self.nodes))).indent().replace('\n\n\n', '\n\n').strip('\n').join('\n\n') if (self.nodes) else '').join('{}')
 		return (Sstr(self.code).indent().join((f" {self.lbrace}\n", f"\n{self.rbrace}"))
 		        if (self.colon is None)
-		        else f"{self.colon} {S('; ').join(self.statement or ())}{self.comment or ''}")
+		        else f"{self.colon} {S('; ').join(self.statement or ())}{self.comment or ''}\n")
 
 class ASTClassBlockNode(ASTNode):
 	lbrace: Literal['{'] | None
@@ -211,7 +211,7 @@ class ASTClassBlockNode(ASTNode):
 	def __str__(self):
 		return (Sstr(self.classcode).indent().join((f"{self.lbrace}\n", f"\n{self.rbrace}"))
 		        if (self.colon is None)
-		        else f"{self.colon} {S('; ').join(self.classstatement or ())}{self.comment or ''}")
+		        else f"{self.colon} {S('; ').join(self.classstatement or ())}{self.comment or ''}\n")
 
 class ASTClassdefBlockNode(ASTNode):
 	lbrace: '{'
@@ -296,6 +296,22 @@ class ASTTypeNode(ASTNode):
 	def __str__(self):
 		return f"{S(', ').join(self.modifier)+' ' if (self.modifier) else ''}{self.identifier}"
 
+class ASTCatchClauseNode(ASTNode):
+	catch: 'catch'
+	type_: ASTTypeNode | None
+	identifier: ASTIdentifierNode | None
+	block: ASTBlockNode
+
+	def __str__(self):
+		return f"{self.catch}{f' {self.type_}' if (self.type_ is not None) else ''}{f' {self.identifier}' if (self.identifier is not None) else ''}{self.block}"
+
+class ASTFinallyClauseNode(ASTNode):
+	finally_: 'finally'
+	block: ASTBlockNode
+
+	def __str__(self):
+		return f"{self.finally_}{self.block}"
+
 class ASTVardefAssignmentNode(ASTNode):
 	identifier: ASTIdentifierNode
 	op: Literal['='] | None
@@ -306,13 +322,17 @@ class ASTVardefAssignmentNode(ASTNode):
 		return f"{self.identifier}{f' {self.op} {self.expr}' if (self.expr) else ''}{self.funccallargs or ''}"
 
 class ASTArgdefNode(ASTNode):
+	special: Literal['/', '*'] | None
 	type_: ASTTypeNode | None
 	identifier: ASTIdentifierNode
+	lbrk: Literal['['] | None
+	integer: int | None
+	rbrk: Literal[']'] | None
 	mode: Literal['?', '+', '*', '**', '='] | None
 	expr: ASTExprNode | None
 
 	def __str__(self):
-		return f"{f'{self.type_} ' if (self.type_) else ''}{self.identifier}{self.mode or ''}{self.expr or ''}"
+		return f"{self.special or ''}{f'{self.type_} ' if (self.type_) else ''}{self.identifier}{f'{self.lbrk}{self.integer}{self.rbrk}' if (self.integer is not None) else ''}{self.mode or ''}{self.expr or ''}"
 
 class ASTClassArgdefNode(ASTNode):
 	type_: ASTTypeNode | None
@@ -380,23 +400,6 @@ class ASTClassAttrgetNode(ASTNode):
 	def __str__(self):
 		return f"{self.attrselfop or ''}{self.expr or ''}{self.attrop or ''}{self.identifier}"
 
-class ASTCatchClauseNode(ASTNode):
-	catch: 'catch'
-	type_: ASTTypeNode
-	identifier: ASTIdentifierNode
-	block: ASTBlockNode
-	_nl: list['\n'] | None
-
-	def __str__(self):
-		return f"{self.catch} {self.type_} {self.identifier}{self.block}"
-
-class ASTFinallyClauseNode(ASTNode):
-	finally_: 'finally'
-	block: ASTBlockNode
-	_nl: list['\n'] | None
-
-	def __str__(self):
-		return f"{self.finally_} {self.block}"
 
 ## Final
 
@@ -408,7 +411,7 @@ class ASTStatementNode(ASTChoiceNode):
 	conditional: ASTConditionalNode | None
 	forloop: ASTForLoopNode | None
 	whileloop: ASTWhileLoopNode | None
-	docall: ASTDocallNode | None
+	docall: ASTDoCallNode | None
 	classdef: ASTClassdefNode | None
 	vardef: ASTVardefNode | None
 	assignment: ASTAssignmentNode | None
@@ -423,7 +426,7 @@ class ASTClassStatementNode(ASTChoiceNode):
 	conditional: ASTConditionalNode | None
 	forloop: ASTForLoopNode | None
 	whileloop: ASTWhileLoopNode | None
-	docall: ASTDocallNode | None
+	docall: ASTDoCallNode | None
 	vardef: ASTVardefNode | None
 	classassignment: ASTClassAssignmentNode | None
 	funccall: ASTFunccallNode | None
@@ -468,16 +471,16 @@ class ASTClassFuncdefNode(ASTNode):
 
 class ASTKeywordExprNode(ASTChoiceNode):
 	return_: ASTReturnNode | None
-	#break_: ASTBreakNode | None
-	#continue_: ASTContinueNode | None
-	#fallthrough: ASTFallthroughNode | None
+	raise_: ASTRaiseNode | None
+	throw: ASTThrowNode | None
+	resume: ASTResumeNode | None
+	break_: ASTBreakNode | None
+	continue_: ASTContinueNode | None
+	fallthrough: ASTFallthroughNode | None
 	#import_: ASTImportNode | None
 	delete: ASTDeleteNode | None
 	#assert_: ASTAssertNode | None
 	#super: ASTSuperNode | None
-        raise_: ASTRaiseNode | None
-	throw: ASTThrowNode | None
-	resume: ASTResumeNode | None
 	#breakpoint: ASTBreakpointNode | None
 
 class ASTConditionalNode(ASTNode):
@@ -513,15 +516,16 @@ class ASTWhileLoopNode(ASTNode):
 	def __str__(self):
 		return f"{self.while_} {self.expr}{self.block[0]}{f' {self.else_}{self.block[1]}' if (self.else_) else ''}"
 
-class ASTDocallNode(ASTNode):
+class ASTDoCallNode(ASTNode):
 	do_: 'do'
-	block: ASTBlockNode
+	block: list[ASTBlockNode]
 	_nl: list['\n'] | None
-	catch: list[ASTCatchClauseNode] | None
-	finally_: ASTFinallyClauseNode | None
+	catchclause: list[ASTCatchClauseNode] | None
+	else_: Literal['else'] | None
+	finallyclause: ASTFinallyClauseNode | None
 
 	def __str__(self):
-		return f"""{self.do_} {self.block}{f" {S(' ').join(self.catch)}" if (self.catch) else ''}{f" {self.finally_}" if (self.finally_) else ''}"""
+		return f"""{self.do_}{self.block[0]}{f" {S(' ').join(self.catchclause)}" if (self.catchclause) else ''}{f' {self.else_}{self.block[1]}' if (self.else_) else ''}{f" {self.finallyclause}" if (self.finallyclause) else ''}"""
 
 class ASTClassdefNode(ASTNode):
 	class_: 'class'
@@ -605,13 +609,6 @@ class ASTReturnNode(ASTNode):
 	def __str__(self):
 		return f"{self.return_} {self.expr}"
 
-class ASTDeleteNode(ASTNode):
-	delete: 'delete'
-	varname: ASTVarnameNode
-
-	def __str__(self):
-		return f"{self.delete} {self.varname}"
-
 class ASTRaiseNode(ASTNode):
 	raise_: 'raise'
 
@@ -631,6 +628,33 @@ class ASTResumeNode(ASTNode):
 
 	def __str__(self):
 		return f"{self.resume}{f' {self.integer}' if (self.integer) else ''}"
+
+class ASTBreakNode(ASTNode):
+	break_: 'break'
+	integer: int | None
+
+	def __str__(self):
+		return f"{self.break_}{f' {self.integer}' if (self.integer) else ''}"
+
+class ASTContinueNode(ASTNode):
+	continue_: 'continue'
+	integer: int | None
+
+	def __str__(self):
+		return f"{self.continue_}{f' {self.integer}' if (self.integer) else ''}"
+
+class ASTFallthroughNode(ASTNode):
+	fallthrough: 'fallthrough'
+
+	def __str__(self):
+		return f"{self.fallthrough}"
+
+class ASTDeleteNode(ASTNode):
+	delete: 'delete'
+	varname: ASTVarnameNode
+
+	def __str__(self):
+		return f"{self.delete} {self.varname}"
 
 class ASTDefkeywordNode(ASTNode):
 	defkeyword: Literal['main', 'exit']

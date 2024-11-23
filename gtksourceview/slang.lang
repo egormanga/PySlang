@@ -193,13 +193,38 @@
 
 		<context id="reserved-keywords" style-ref="reserved">
 			<keyword>def</keyword>
-			<keyword>try</keyword>
-			<keyword>catch</keyword>
-			<keyword>except</keyword>
-			<keyword>finally</keyword>
-			<keyword>raise</keyword>
-			<keyword>with</keyword>
-			<keyword>yield</keyword>
+      <keyword>each</keyword>
+      <keyword>foreach</keyword>
+      <keyword>until</keyword>
+      <keyword>repeat</keyword>
+      <keyword>begin</keyword>
+      <keyword>end</keyword>
+      <keyword>yield</keyword>
+      <keyword>async</keyword>
+      <keyword>await</keyword>
+      <keyword>go</keyword>
+      <keyword>try</keyword>
+      <keyword>except</keyword>
+      <keyword>with</keyword>
+      <keyword>switch</keyword>
+      <keyword>match</keyword>
+      <keyword>case</keyword>
+      <keyword>goto</keyword>
+      <keyword>exit</keyword>
+      <keyword>include</keyword>
+      <keyword>using</keyword>
+      <keyword>default</keyword>
+      <keyword>final</keyword>
+      <keyword>public</keyword>
+      <keyword>protected</keyword>
+      <keyword>private</keyword>
+      <keyword>internal</keyword>
+      <keyword>override</keyword>
+      <keyword>overrides</keyword>
+      <keyword>extends</keyword>
+      <keyword>implements</keyword>
+      <keyword>interface</keyword>
+      <keyword>struct</keyword>
 		</context>
 
 		<context id="builtin-constants" style-ref="builtin-constant">
