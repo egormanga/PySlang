@@ -21,6 +21,8 @@ CONST	= 0x0C
 SGET	= 0x0D
 SSET	= 0x0E
 
+MAGIC = b"\x0C\x80\x03SBC\x01"
+
 def writeVarInt(v):
 	assert (v >= 0)
 	r = bytearray()
@@ -82,7 +84,7 @@ class Instrs:
 	@init_defaults
 	def __init__(self, *, name, ns, filename, scpcells: indexset):
 		self.name, self.ns, self.filename, self.scpcells = name, ns, filename, scpcells
-		self.instrs = bytearray()
+		self.instrs = bytearray(MAGIC)
 		self.opmap = dict()
 
 	def compile(self):

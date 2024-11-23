@@ -113,7 +113,7 @@ classfuncdef: (type | 'method') identifier '(' (argdef (',' argdef)*)? ')' (clas
 
 keywordexpr: return | raise | throw | resume | break | continue | fallthrough | import | delete | assert | super | breakpoint
 
-classdef: 'class' identifier ('(' identifier (',' identifier)* ')')? classdefblock
+classdef: 'class' identifier ('<' identifier)* classdefblock
 
 conditional: 'if' expr block (\n* 'elif' expr block)* (\n* 'else' block)?
 
@@ -139,7 +139,7 @@ classkeyworddef: classdefkeyword ('(' (classargdef (',' classargdef)*)? ')')? (c
 
 ## Keywords
 
-return: 'return' expr
+return: 'return' expr?
 
 raise: 'raise'
 
@@ -215,7 +215,7 @@ char: /\\ (?:[\\'"abefnrtv] |
 
 character: [\' (char | \") \']
 
-string: ['f'? ('"' (char | \')* '"' | \' (char | \")* \')]
+string: ['f'? ('"' (char | \')* '"' | \' (char | '"')* \')]
 
 tuple: '(' type expr (',' type expr)* ')'
 

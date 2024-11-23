@@ -67,14 +67,15 @@ class Expr(Token):
 
 @export
 @singleton
-class Lexer(Slots):
-	sldef: ...
-
+class Lexer:
 	def __init__(self):
 		self.sldef = sldef.load()
 
 	def lstripspace(self, s):
 		return lstripcount(s, self.definitions.whitespace.format.charset)
+
+	def lstripcont(self, s):
+		return map(self.lstripspace, s.removeprefix(self.definitions.continuation.format.token).split('\n', maxsplit=1))
 
 	@singledispatchmethod
 	def _parse_token(self, token: Format.Token, src: str, *, lineno: int, offset: int, usage: str, was: set) -> [Expr]: ...
@@ -105,17 +106,29 @@ class Lexer(Slots):
 
 	@_parse_token.register
 	def parse_token(self, token: Format.Literal, src, *, lineno, offset, usage, was):
+		try: return [self._parse_token_cache_literal[token.literal, lineno, offset]]
+		except KeyError: pass
+
 		if (not src.startswith(token.literal)): raise SlSyntaxExpectedError(token, tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=usage)
 		assert (token.length == len(token.literal))
-		return [Token(token.literal, name=token.name, typename=token.typename, lineno=lineno, offset=offset, length=token.length)] # TODO: name
+
+		r = self._parse_token_cache_literal[token.literal, lineno, offset] = Token(token.literal, name=token.name, typename=token.typename, lineno=lineno, offset=offset, length=token.length) # TODO: name
+		return [r]
+	_parse_token_cache_literal = dict()
 
 	@_parse_token.register
 	def parse_token(self, token: Format.Pattern, src, *, lineno, offset, usage, was):
+		try: return [self._parse_token_cache_pattern[token.pattern, lineno, offset]]
+		except KeyError: pass
+
 		m = re.match(token.pattern, src, flags=(re.M | re.S | re.X))
 		if (m is None): raise SlSyntaxExpectedError(token, tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=usage)
 		try: t = m[1]
 		except IndexError: t = m[0]
-		return [Token(t, name=token.name, typename=token.typename, lineno=lineno, offset=offset, length=len(t))]
+
+		r = self._parse_token_cache_pattern[token.pattern, lineno, offset] = Token(t, name=token.name, typename=token.typename, lineno=lineno, offset=offset, length=len(t))
+		return [r]
+	_parse_token_cache_pattern = dict()
 
 	@_parse_token.register
 	def parse_token(self, token: Format.Optional, src, *, lineno, offset, usage, was):
@@ -153,12 +166,11 @@ class Lexer(Slots):
 			 # - max((i.offset+i.lineno for i in tl if i.lineno == lineno), default=0))
 
 			src_ = src
-			while (offset > (loff + len(first(l := src.partition('\n'))))):
-				src = (l[1] + l[2])
+			while (offset > (loff + len(first(l := src_.partition('\n'))))):
+				src_ = l[2]
 				lineno += 1
 				offset -= (loff + len(l[0] + l[1]))
 				loff = 0
-			src = src_
 
 			#dlog(f"[…] {i} for {usage}:", *map(str, tl),
 			#	max(map(operator.attrgetter('lastpos'), tl)),
@@ -170,12 +182,19 @@ class Lexer(Slots):
 			#	repr(src[srcoff:]),
 			#	self.lstripspace(src[srcoff:]),
 			#sep='\n', end='\n\n')
+
 			assert (0 <= srcoff <= len(src))
 			if (ii or _stripspace):
 				ws, src = self.lstripspace(src[srcoff:])
 				offset += ws
 				assert (not src[:1].replace('\n', '').isspace())
 			else: src = src[srcoff:]
+
+			if (src.startswith(self.definitions.continuation.format.token)):
+				(ws, comment), (offset, src) = self.lstripcont(src)
+				if (comment): tl += self.parse_token(self.sldef.definitions['linecomment'].format, comment, lineno=lineno, offset=ws, usage=usage, was=was)
+				lineno += 1
+				assert (not src[:1].replace('\n', '').isspace())
 
 		assert (not src[:1].replace('\n', '').isspace())
 
@@ -215,12 +234,7 @@ class Lexer(Slots):
 	@_parse_token.register
 	def parse_token(self, token: Format.Joint, src, *, lineno, offset, usage, was):
 		res = self._parse_token_list(token, src, lineno=lineno, offset=offset, usage=usage, was=was, _stripspace=False)
-
-		assert (res[-1].lineno == res[0].lineno)
-		length = (res[-1].offset + res[-1].length - res[0].offset)
-		assert (length == sum(i.length for i in res))
-
-		return [Token(str().join(i.token for i in res), name=(res[-1].name if (len(res) == 1) else token.name), typename=(res[-1].typename if (len(res) == 1) else token.typename), lineno=res[0].lineno, offset=res[0].offset, length=length)]
+		return [Token(str().join(i.token for i in res), name=(res[-1].name if (len(res) == 1) else token.name), typename=(res[-1].typename if (len(res) == 1) else token.typename), lineno=res[0].lineno, offset=res[0].offset, length=sum(i.length for i in res))]
 
 	parse_token = _parse_token; del _parse_token
 

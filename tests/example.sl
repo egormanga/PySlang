@@ -20,6 +20,6 @@ int h(int x) = x+1     # h(): int, x: int
 
 main {
 	stdio.println(h(n), \  # comment here too
-		f('123asd') + g('32') + 1)  #--> «123124 f»
-	stdio.println(q/z/2**96)            #--> «4294967296.0»
+		(f('123asd') + g('32')) + 1)  #--> «123124 f»
+	stdio.println(q/z/2**96)              #--> «4294967296.0»
 }

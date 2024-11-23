@@ -132,7 +132,7 @@ class Instrs:
 
 	@dispatch
 	def load(self, x: ASTItemgetNode):
-		return f"{self.load(x.expr[0])}[{self.load(x.expr[1])}]"
+		return f"{self.load(x.value)}[{self.load(x.index)}]"
 
 	@dispatch
 	def load(self, x: ASTValueNode, **kwargs):
@@ -231,7 +231,7 @@ class Instrs:
 
 	@dispatch
 	def add(self, x: ASTConditionalNode):
-		return f"""if {'\telseif '.join(f"{expr_ if (expr_ in ('true', 'false')) else f'({expr_}):__bool()' if (not expr_.startswith('bool(')) else expr_.removeprefix('bool(').removesuffix(')')} then{self.add(block, indent=True)}" for expr, block in zip(x.expr, x.block) if (expr_ := self.load(expr)))}{f"\telse {self.add(x.block[-1], indent=True)}" if (x.else_) else ''}\tend"""
+		return f"""if {'\telseif '.join(f"{expr_ if (expr_ in ('true', 'false')) else f'({expr_}):__bool()' if (not expr_.startswith('bool(')) else expr_.removeprefix('bool(').removesuffix(')')} then{self.add(block, indent=True)}" for expr, block in zip(x.expr, x.block) if (expr_ := self.load(expr)))}{f"\telse {self.add(x.elseblock, indent=True)}" if (x.else_) else ''}\tend"""
 
 	@dispatch
 	def add(self, x: ASTForLoopNode):
@@ -244,12 +244,12 @@ class Instrs:
 
 	@dispatch
 	def add(self, x: ASTDoBlockNode):
-		return f"do local __success, __error = pcall(function(){self.add(x.block[0], indent=True)}\tend); if not __success then {'; '.join(map(self.add, x.catchclause))}{f'; else{self.add(x.block[1], indent=True)}' if (x.else_) else ''}\tend{f'{self.add(x.finallyclause)}\t' if (x.finallyclause) else ''}if __error then error(__error) end; end"
+		return f"do local __success, __error = pcall(function(){self.add(x.doblock, indent=True)}\tend); if not __success then {'; '.join(map(self.add, x.catchclause))}{f'; else{self.add(x.elseblock, indent=True)}' if (x.else_) else ''}\tend{f'{self.add(x.finallyclause)}\t' if (x.finallyclause) else ''}if __error then error(__error) end; end"
 
 	@dispatch
 	def add(self, x: ASTClassdefNode):
-		classname = self.load(x.identifier[0])
-		bases = tuple(map(self.load, x.identifier[1:]))
+		classname = self.load(x.classname)
+		bases = tuple(map(self.load, x.bases))
 		assert (len(bases) <= 1) # TODO: multiple bases
 		return (f"{classname} = "
 		        + (f"{only(bases)}:new()" if (bases) else "setmetatable({new = function(self, obj) obj = obj or {}; self.__index = self; setmetatable(obj, self):init(); return obj; end, init = function() end, destroy = function() end}, {__call = function(self, ...) obj = self:new(); obj:constr(...); return obj; end})")
@@ -301,6 +301,9 @@ class Instrs:
 
 
 	## Keywords
+
+	def add(self, x: ASTReturnNode):
+		return f"return{f' {self.load(x.expr)}' if (x.expr) else ''}"
 
 	@dispatch
 	def add(self, x: ASTRaiseNode):

@@ -209,7 +209,7 @@ class ASTClassBlockNode(ASTNode):
 	comment: list[ASTCommentNode] | None
 
 	def __str__(self):
-		return (Sstr(self.classcode).indent().join((f"{self.lbrace}\n", f"\n{self.rbrace}"))
+		return (Sstr(self.classcode).indent().join((f" {self.lbrace}\n", f"\n{self.rbrace}"))
 		        if (self.colon is None)
 		        else f"{self.colon} {S('; ').join(self.classstatement or ())}{self.comment or ''}\n")
 
@@ -220,7 +220,7 @@ class ASTClassdefBlockNode(ASTNode):
 	rbrace: '}'
 
 	def __str__(self):
-		return Sstr(self.classdefcode).indent().join((f"{self.lbrace}\n", f"\n{self.rbrace}"))
+		return Sstr(self.classdefcode).indent().join((f" {self.lbrace}\n", f"\n{self.rbrace}"))
 
 
 ## Primitive
@@ -266,7 +266,17 @@ class ASTItemgetNode(ASTNode):
 	rbrk: ']'
 
 	def __str__(self):
-		return f"{self.expr[0]}{self.lbrk}{self.expr[1]}{self.rbrk}"
+		return f"{self.value}{self.lbrk}{self.index}{self.rbrk}"
+
+	@property
+	def value(self):
+		if (len(self.expr) != 2): raise WTFException(self, self.expr)
+		return self.expr[0]
+
+	@property
+	def index(self):
+		if (len(self.expr) != 2): raise WTFException(self, self.expr)
+		return self.expr[1]
 
 class ASTValueNode(ASTChoiceNode):
 	binopexpr: ASTBinOpExprNode | None
@@ -467,7 +477,7 @@ class ASTClassFuncdefNode(ASTNode):
 	expr: ASTExprNode | None
 
 	def __str__(self):
-		return f"{self.type_ or self.method} {self.identifier}{self.lparen}{S(', ').join(self.argdef or ())}{self.rparen} {self.classblock or ''}{f' {self.eq} {self.expr}' if (self.expr) else ''}"
+		return f"{self.type_ or self.method} {self.identifier}{self.lparen}{S(', ').join(self.argdef or ())}{self.rparen}{self.classblock or ''}{f' {self.eq} {self.expr}' if (self.expr) else ''}"
 
 class ASTKeywordExprNode(ASTChoiceNode):
 	return_: ASTReturnNode | None
@@ -492,7 +502,11 @@ class ASTConditionalNode(ASTNode):
 	else_: Literal['else'] | None
 
 	def __str__(self):
-		return f"{self.if_} {S(' elif ').join(f'{expr}{block}' for expr, block in zip(self.expr, self.block))}{f' {self.else_}{self.block[-1]}' if (self.else_) else ''}"
+		return f"{self.if_} {S(' elif ').join(f'{expr}{block}' for expr, block in zip(self.expr, self.block))}{f' {self.else_}{self.elseblock}' if (self.else_) else ''}"
+
+	@property
+	def elseblock(self):
+		return self.block[-1]
 
 class ASTForLoopNode(ASTNode):
 	for_: 'for'
@@ -504,7 +518,15 @@ class ASTForLoopNode(ASTNode):
 	else_: Literal['else'] | None
 
 	def __str__(self):
-		return f"{self.for_} {self.identifier} {self.in_} {self.expr}{self.block[0]}{f' {self.else_}{self.block[1]}' if (self.else_) else ''}"
+		return f"{self.for_} {self.identifier} {self.in_} {self.expr}{self.forblock}{f' {self.else_}{self.elseblock}' if (self.else_) else ''}"
+
+	@property
+	def forblock(self):
+		return self.block[0]
+
+	@property
+	def elseblock(self):
+		return self.block[-1]
 
 class ASTWhileLoopNode(ASTNode):
 	while_: 'while'
@@ -514,7 +536,15 @@ class ASTWhileLoopNode(ASTNode):
 	else_: Literal['else'] | None
 
 	def __str__(self):
-		return f"{self.while_} {self.expr}{self.block[0]}{f' {self.else_}{self.block[1]}' if (self.else_) else ''}"
+		return f"{self.while_} {self.expr}{self.whileblock}{f' {self.else_}{self.elseblock}' if (self.else_) else ''}"
+
+	@property
+	def whileblock(self):
+		return self.block[0]
+
+	@property
+	def elseblock(self):
+		return self.block[-1]
 
 class ASTDoBlockNode(ASTNode):
 	do_: 'do'
@@ -527,15 +557,30 @@ class ASTDoBlockNode(ASTNode):
 	def __str__(self):
 		return f"""{self.do_}{self.block[0]}{f" {S(' ').join(self.catchclause)}" if (self.catchclause) else ''}{f' {self.else_}{self.block[1]}' if (self.else_) else ''}{f" {self.finallyclause}" if (self.finallyclause) else ''}"""
 
+	@property
+	def doblock(self):
+		return self.block[0]
+
+	@property
+	def elseblock(self):
+		return self.block[-1]
+
 class ASTClassdefNode(ASTNode):
 	class_: 'class'
 	identifier: list[ASTIdentifierNode]
-	_lparen: Literal['('] | None
-	_rparen: Literal[')'] | None
+	_lt: list['<'] | None
 	classdefblock: ASTClassdefBlockNode
 
 	def __str__(self):
-		return f"""{self.class_} {self.identifier[0]}{f"({S(', ').join(self.identifier[1:])})" if (len(self.identifier) > 1) else ''} {self.classdefblock}"""
+		return f"""{self.class_} {S(' < ').join(self.identifier)}{self.classdefblock}"""
+
+	@property
+	def classname(self):
+		return self.identifier[0]
+
+	@property
+	def bases(self):
+		return self.identifier[1:]
 
 class ASTVardefNode(ASTNode):
 	type_: ASTTypeNode
@@ -597,17 +642,17 @@ class ASTClassKeyworddefNode(ASTNode):
 	semicolon: Literal[';'] | None
 
 	def __str__(self):
-		return f"""{self.classdefkeyword}{f" ({S(', ').join(self.classargdef or ())})" if (self.classargdef or self.lparen) else ''}{f' {self.classblock}' if (self.classblock is not None) else self.semicolon}"""
+		return f"""{self.classdefkeyword}{f" ({S(', ').join(self.classargdef or ())})" if (self.classargdef or self.lparen) else ''}{self.classblock or self.semicolon}"""
 
 
 ## Keywords
 
 class ASTReturnNode(ASTNode):
 	return_: 'return'
-	expr: ASTExprNode
+	expr: ASTExprNode | None
 
 	def __str__(self):
-		return f"{self.return_} {self.expr}"
+		return f"{self.return_}{f' {self.expr}' if (self.expr is not None) else ''}"
 
 class ASTRaiseNode(ASTNode):
 	raise_: 'raise'
