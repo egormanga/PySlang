@@ -400,8 +400,9 @@ def main(cargs):
 	print('\n')
 	print('\n\n'.join(map(repr, res)))
 
-	for i, j in zip((f"{k}: {v}" for k, v in SlDef.parse(open(cargs.file).read()).items()), map(str, res)):
-		if (i != j): sys.exit(f"\n\033[1;91mMismatch!\033[0m\n\033[92mExpected:\033[0m  {i}\n\033[93mGot:\033[0m       {j}")
+	with open(cargs.file, 'r') as f:
+		for i, j in zip((f"{k}: {v}" for k, v in SlDef.parse(f.read()).items()), map(str, res)):
+			if (i != j): sys.exit(f"\n\033[1;91mMismatch!\033[0m\n\033[92mExpected:\033[0m  {i}\n\033[93mGot:\033[0m       {j}")
 
 	check = SlDef.build('\n'.join(map(str, res))).definitions.values()
 

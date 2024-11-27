@@ -227,7 +227,7 @@ class Instrs:
 	@dispatch
 	def add(self, x: ASTFuncdefNode):
 		defaults = tuple(filter(None, map(self.load, (x.argdef or ()))))
-		return f"""function {self.load(x.identifier)}{f'''(...) local arg<const> = table.pack(...); {f"setmetatable(arg, {{__index = {{{', '.join(defaults)}}}}}); " if (defaults) else ''}{'; '.join(self.add(i, index=ii) for ii, i in enumerate(x.argdef, 1))}''' if (x.argdef) else '()'}{self.add(x.block) if (x.block) else f"{';'*bool(x.argdef)} return {self.load(x.expr)} "}end"""
+		return f"""function {self.load(x.identifier)}{f'''(...) local arg<const> = table.pack(...); {f"setmetatable(arg, {{__index = {{{', '.join(defaults)}}}}}); " if (defaults) else ''}{'; '.join(self.add(i, index=ii) for ii, i in enumerate(x.argdef, 1))}''' if (x.argdef) else '()'}{self.add(x.block) if (x.block) else f"{';'*bool(x.argdef)} return {self.load(x.expr)} "}end\n"""
 
 	@dispatch
 	def add(self, x: ASTKeywordExprNode):

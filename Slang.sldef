@@ -205,7 +205,7 @@ integer: decimal |
          ['0x' hexadecimal] |
          ['0a' base36]
 
-number: [(decimal \')? integer ('.' ['0'* decimal])?]
+number: [(decimal \')? integer ('.' ['0'* decimal])? (('e' | 'E') ('+' | '-')? decimal)?]
 
 char: /\\ (?:[\\'"abefnrtv] |
            N\{[0-9A-Z\ -]+\} |
