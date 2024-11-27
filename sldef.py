@@ -33,9 +33,9 @@ class Tokenizer:
 		if (not s or not s[0].isidentifier()): return
 		i = 1
 		for i in range(1, len(s)):
-			if (not s[i].isalnum() and s[i] != '_'): break
+			if (not s[i].isalnum() and s[i] not in '_.'): break
 		else: i += 1
-		if (s[:i].isidentifier()): return i
+		if (s[:i].replace('.', '').isidentifier()): return i
 		return (0, i)
 
 	@classmethod
@@ -176,15 +176,15 @@ class Format(Slots):
 
 	class Optional(Token):
 		def __str__(self):
-			return f"{str(self.token).join('()') if (isinstance(self.token, Format.TokenList)) else self.token}?"
+			return f"{str(self.token).join('()') if (isinstance(self.token, Format.TokenList) and not isinstance(self.token, Format.Joint)) else self.token}?"
 
 	class ZeroOrMore(Token):
 		def __str__(self):
-			return f"{str(self.token).join('()') if (isinstance(self.token, Format.TokenList)) else self.token}*"
+			return f"{str(self.token).join('()') if (isinstance(self.token, Format.TokenList) and not isinstance(self.token, Format.Joint)) else self.token}*"
 
 	class OneOrMore(Token):
 		def __str__(self):
-			return f"{str(self.token).join('()') if (isinstance(self.token, Format.TokenList)) else self.token}+"
+			return f"{str(self.token).join('()') if (isinstance(self.token, Format.TokenList) and not isinstance(self.token, Format.Joint)) else self.token}+"
 
 	class TokenList(Token):
 		tokens: list
@@ -209,7 +209,7 @@ class Format(Slots):
 			for ii, i in enumerate(self.tokens):
 				self.tokens[ii] = i.flatten()
 
-			return (self.tokens[0] if (len(self.tokens) == 1) else self)
+			return (only(self.tokens) if (len(self.tokens) == 1) else self)
 
 		@property
 		def literals(self):
@@ -300,7 +300,7 @@ class Format(Slots):
 			elif (m := re.fullmatch(r'\\.+', token)): token = cls.Escape(m[0])
 			elif (m == r'\#'): token = cls.Literal('#')
 			elif (m := re.fullmatch(r'''(['"])(.+)\1''', token)): token = cls.Literal(m[2])
-			elif (token.isidentifier()): token = cls.Reference(token)
+			elif (token.replace('.', '').isidentifier()): token = cls.Reference(token)
 			else: raise ValueError(token)
 
 			format.append(token)
@@ -334,8 +334,9 @@ class SlDef(Slots):
 
 	definitions: AttrDict
 
-	def __init__(self, definitions=None):
+	def __init__(self, definitions=None, **extdefs):
 		if (definitions is not None): self.definitions |= definitions
+		self.definitions |= extdefs
 
 	@classmethod
 	def parse(cls, src):
@@ -368,7 +369,7 @@ class SlDef(Slots):
 		return defs
 
 	@classmethod
-	def build(cls, src):
+	def build(cls, src, **kwargs):
 		definitions = dict()
 
 		for k, v in cls.parse(src).items():
@@ -378,14 +379,14 @@ class SlDef(Slots):
 
 			definitions[k] = cls.Definition.parse(name=k, tokens=tokens, special=special)
 
-		return cls(definitions)
+		return cls(definitions, **kwargs)
 
 @export
-def load(file=DEFAULT_DEF):
+def load(file=DEFAULT_DEF, **kwargs):
 	with open(file, 'r') as f:
 		src = f.read()
 
-	sldef = SlDef.build(src)
+	sldef = SlDef.build(src, **kwargs)
 
 	return sldef
 

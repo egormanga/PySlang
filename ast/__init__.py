@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-# PySlang AST
+# PySlang Abstract Syntax Tree
 
 from __future__ import annotations
 
+from .. import sldef
 from ..exceptions import SlValidationError
-from ..lexer import Expr, Lexer, Token
+from ..lexer import Expr, Token
 from typing import Literal
 from utils.nolog import *
+
+sldef = sldef.load()
 
 class ASTNodeMeta(ABCSlotsInitMeta):
 	class OptimizerMeta(SlotsTypecheckMeta):
@@ -86,17 +89,16 @@ class ASTNode(metaclass=ASTNodeMeta):
 		for i in t.tokens:
 			#print(i, end='\n\n')
 
-			name = i.name
+			name = (last(i.name.rpartition('.')) if (i.name.replace('.', '').isidentifier()) else i.name)
 			pattern = None
 
 			key = name
 			if (keyword.iskeyword(key) or keyword.issoftkeyword(key)): key += '_'
+			if (not isinstance(i, Expr) and i.typename == 'joint' and key in annotations): key += '_'
 
 			try: a = annotations[key]
 			except KeyError:
-				try:
-					if (i.typename == 'pattern'): pattern = name = repr(name.removeprefix('/').removesuffix('/'))
-				except AssertionError: pass
+				if (not isinstance(i, Expr) and i.typename == 'pattern'): pattern = name = repr(name.removeprefix('/').removesuffix('/'))
 				try: key, a = first((k, v) for k, v in annotations.items()
 				                           for a in ((i for i in typing.get_args(v) if i is not NoneType) if (typing_inspect.is_union_type(v)) else (v,))
 				                           for j in (a, *typing.get_args(a), *Stuple(map(typing.get_args, typing.get_args(a))).flatten())
@@ -464,7 +466,7 @@ class ASTUnPostOpExprNode(ASTUnOpExprNode):
 	unpostop: ASTUnPostOpNode
 
 	def __str__(self):
-		return f"{self.expr}{' '*(str(self.unpostop)[-1].isalnum())}{self.unpostop}"
+		return f"{self.expr}{' '*(str(self.unpostop)[0].isalnum())}{self.unpostop}"
 
 	def analyze(self, ns):
 		self.expr.analyze(ns)
@@ -573,7 +575,7 @@ class ASTExprNode(ASTNode):
 ## Non-final
 
 class ASTTypeNode(ASTNode):
-	modifier: list[Literal[Lexer.sldef.definitions.modifier.format.literals]] | None
+	modifier: list[Literal[sldef.definitions.modifier.format.literals]] | None
 	identifier: ASTIdentifierNode
 
 	def __str__(self):
@@ -670,7 +672,7 @@ class ASTArgdefNode(ASTNode):
 	lbrk: Literal['['] | None
 	integer: int | None
 	rbrk: Literal[']'] | None
-	mode: Literal['?', '+', '*', '**', '='] | None
+	mode: Literal['**', '?', '+', '*', '='] | None
 	expr: ASTExprNode | None
 
 	def __str__(self):
@@ -686,7 +688,7 @@ class ASTArgdefNode(ASTNode):
 class ASTClassArgdefNode(ASTNode):
 	type_: ASTTypeNode
 	classvarname: ASTClassVarnameNode
-	mode: Literal['?', '+', '*', '**', '='] | None
+	mode: Literal['**', '?', '+', '*', '='] | None
 	expr: ASTExprNode | None
 
 	def __str__(self):
@@ -803,7 +805,7 @@ class ASTAttrSelfOpNode(ASTSimpleNode):
 	def __str__(self):
 		return f"{self.op}"
 
-class ASTAttrOpNode(ASTChoiceNode):
+class ASTAttrOpNode(ASTSimpleNode, ASTChoiceNode):
 	op: Literal['->'] | None
 	attrselfop: ASTAttrSelfOpNode | None
 
@@ -965,7 +967,7 @@ class ASTKeywordExprNode(ASTChoiceNode):
 	break_: ASTBreakNode | None
 	continue_: ASTContinueNode | None
 	fallthrough: ASTFallthroughNode | None
-	#import_: ASTImportNode | None
+	import_: ASTImportNode | None
 	delete: ASTDeleteNode | None
 	#assert_: ASTAssertNode | None
 	#super: ASTSuperNode | None
@@ -1355,6 +1357,29 @@ class ASTFallthroughNode(ASTSimpleNode):
 	def __str__(self):
 		return f"{self.fallthrough}"
 
+class ASTImportNode(ASTNode):
+	import_: 'import'
+	import__: list[str]
+	identifier: list[ASTIdentifierNode]
+	colon: Literal[':'] | None
+	_comma: list[','] | None
+	star: Literal['*'] | None
+
+	def __str__(self):
+		return f"""{self.import_} {str().join(self.import__)}{self.package}{self.colon*bool(self.names or self.star)}{f" {S(', ').join(self.names)}" if (self.names) else ''}{self.star or ''}"""
+
+	def analyze(self, ns):
+		for i in self.identifier:
+			i.analyze(ns)
+
+	@property
+	def package(self):
+		return self.identifier[0]
+
+	@property
+	def names(self):
+		return self.identifier[1:]
+
 class ASTDeleteNode(ASTNode):
 	delete: 'delete'
 	varname: ASTVarnameNode
@@ -1385,7 +1410,7 @@ class ASTClassDefkeywordNode(ASTSimpleNode):
 		return f"{self.classdefkeyword}"
 
 class ASTReservedNode(ASTSimpleNode):
-	reserved: Literal[Lexer.sldef.definitions.reserved.format.literals]
+	reserved: Literal[sldef.definitions.reserved.format.literals]
 
 	def __str__(self):
 		return f"{self.reserved}"
@@ -1465,21 +1490,21 @@ class ASTLiteralNode(ASTChoiceNode):
 
 ## Operators
 
-class ASTUnOpNode(ASTChoiceNode):
-	unchop: Literal[Lexer.sldef.definitions.unchop.format.literals] | None
-	undchop: Literal[Lexer.sldef.definitions.undchop.format.literals] | None
-	unkwop: Literal[Lexer.sldef.definitions.unkwop.format.literals] | None
+class ASTUnOpNode(ASTSimpleNode, ASTChoiceNode):
+	unchop: Literal[sldef.definitions.unchop.format.literals] | None
+	undchop: Literal[sldef.definitions.undchop.format.literals] | None
+	unkwop: Literal[sldef.definitions.unkwop.format.literals] | None
 	unmathop: str | None
 
-class ASTUnPostOpNode(ASTChoiceNode):
-	unchpostop: Literal[Lexer.sldef.definitions.unchpostop.format.literals] | None
-	undchpostop: Literal[Lexer.sldef.definitions.undchpostop.format.literals] | None
+class ASTUnPostOpNode(ASTSimpleNode, ASTChoiceNode):
+	unchpostop: Literal[sldef.definitions.unchpostop.format.literals] | None
+	undchpostop: Literal[sldef.definitions.undchpostop.format.literals] | None
 
-class ASTBinOpNode(ASTChoiceNode):
-	binchop: Literal[Lexer.sldef.definitions.binchop.format.literals] | None
-	bindchop: Literal[Lexer.sldef.definitions.bindchop.format.literals] | None
-	binkwop: Literal[Lexer.sldef.definitions.binkwop.format.literals] | None
-	binmathop: Literal[Lexer.sldef.definitions.binmathop.format.literals] | None
+class ASTBinOpNode(ASTSimpleNode, ASTChoiceNode):
+	binchop: Literal[sldef.definitions.binchop.format.literals] | None
+	bindchop: Literal[sldef.definitions.bindchop.format.literals] | None
+	binkwop: Literal[sldef.definitions.binkwop.format.literals] | None
+	binmathop: Literal[sldef.definitions.binmathop.format.literals] | None
 
 
 ## Comments
@@ -1496,12 +1521,9 @@ class ASTLineCommentNode(ASTSimpleNode):
 	def __str__(self):
 		return f"{self.linecomment}"
 
-class ASTCommentNode(ASTChoiceNode):
+class ASTCommentNode(ASTSimpleNode, ASTChoiceNode):
 	blockcomment: ASTBlockCommentNode | None
 	linecomment: ASTLineCommentNode | None
-
-	def analyze(self, ns):
-		pass
 
 	def optimize(self, ns, level=0):
 		if (level >= 3): return None
@@ -1521,7 +1543,7 @@ class Namespace(Slots):
 		self.parent = parent
 
 	def __repr__(self):
-		return '\n\t '.join(f"<{self.refcnt.get(i, '?')}> {self.types.get(i, '*')} {i} = {self.values.get(i, '…')}" for i in S((*self.types, *self.values, *self.refcnt)).uniquize()).join('{}')
+		return '\n\t '.join(f"<{self.refcnt.get(i, '?')}> {self.types.get(i, '*')} {i}{f' = {v}' if (v := self.values.get(i)) else ''}" for i in S((*self.types, *self.values, *self.refcnt)).uniquize()).join('{}')
 
 	def __contains__(self, x):
 		try: self.value(x)
@@ -1529,7 +1551,7 @@ class Namespace(Slots):
 		else: return True
 
 	@cachedfunction
-	def derive(self, node: ASTNode, index: int = 0):
+	def derive(self, node: ASTNode, index: int = 0, /):
 		return self.__class__(parent=self)
 
 	@dispatch
@@ -1549,24 +1571,25 @@ class Namespace(Slots):
 		return value.value
 
 	@dispatch
-	def define(self, name: ASTVarnameNode, type_: ASTTypeNode, value=None):
-		self.define(name.value, type_, value=value)
+	def __define(self, name: ASTVarnameNode, type_: ASTTypeNode, value=None):
+		self.__define(name.value, type_, value=value)
 
 	@dispatch
-	def define(self, name: ASTIdentifierNode, type_: ASTTypeNode, value=None):
-		self.define(name.identifier, type_, value=value)
+	def __define(self, name: ASTIdentifierNode, type_: ASTTypeNode, value=None):
+		self.__define(name.identifier, type_, value=value)
 
 	@dispatch
-	def define(self, name: str, type_: ASTTypeNode):
+	def __define(self, name: str, type_, value):
+		self.__define(name, type_)
+		self.values[name] = value
+
+	@dispatch
+	def __define(self, name: str, type_):
 		if ((t := self.types.get(name, type_)) != type_): raise ValueError(name, "redefined", t, type_)
 		self.types[name] = type_
 		self.refcnt[name] = 0
 
-	@dispatch
-	def define(self, name: str, type_: ASTTypeNode, value):
-		self.define(name, type_)
-		self.values[name] = value
-		self.refcnt[name] = 0
+	define = __define
 
 	@dispatch
 	def assign(self, name: ASTVarnameNode, value):

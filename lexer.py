@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # PySlang lexer
 
-from . import sldef
-from .sldef import Format
+from .sldef import Format, SlDef
 from .exceptions import *
 from utils.nolog import *
 
@@ -66,27 +65,29 @@ class Expr(Token):
 		return max(i.lastpos for i in self.tokens)
 
 @export
-@singleton
 class Lexer:
 	def __init__(self):
-		self.sldef = sldef.load()
+		self._parse_token_cache_literal = dict()
+		self._parse_token_cache_pattern = dict()
 
-	def lstripspace(self, s):
-		return lstripcount(s, self.definitions.whitespace.format.charset)
+	def lstripspace(self, sldef: SlDef, s: str):
+		return lstripcount(s, sldef.definitions.whitespace.format.charset)
 
-	def lstripcont(self, s):
-		return map(self.lstripspace, s.removeprefix(self.definitions.continuation.format.token).split('\n', maxsplit=1))
+	def lstripcont(self, sldef: SlDef, s: str):
+		return (self.lstripspace(sldef, i) for i in s.removeprefix(sldef.definitions.continuation.format.token).split('\n', maxsplit=1))
 
 	@singledispatchmethod
-	def _parse_token(self, token: Format.Token, src: str, *, lineno: int, offset: int, usage: str, was: set) -> [Expr]: ...
+	def _parse_token(self, token: Format.Token, sldef: SlDef, src: str, *, lineno: int, offset: int, usage: str, was: set) -> [Expr]: ...
 
 	@_parse_token.register
-	def parse_token(self, token: Format.Reference, src, *, lineno, offset, usage, was):
+	def parse_token(self, token: Format.Reference, sldef: SlDef, src, *, lineno, offset, usage, was):
 		if ((location := (lineno, offset, token.name)) in was):
 			if ((*location, None) in was): raise SlSyntaxExpectedNothingError(tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=token.name)
 			was |= {(*location, None)}
 
-		tl = self.parse_token(self.sldef.definitions[token.name].format, src, lineno=lineno, offset=offset, usage=token.name, was=(was | {location}))
+		ns, _, name = token.name.rpartition('.')
+		if (ns): sldef = sldef.definitions[ns]
+		tl = self.parse_token(sldef.definitions[name].format, sldef, src, lineno=lineno, offset=offset, usage=token.name, was=(was | {location}))
 		if (not tl): raise SlSyntaxExpectedMoreTokensError(token, lineno=lineno, offset=-1, length=0, usage=token.name)
 
 		assert (tl[0].offset == offset)
@@ -105,7 +106,7 @@ class Lexer:
 		return [Expr(tl, name=token.name, lineno=oldlineno, offset=oldoffset, length=length)]
 
 	@_parse_token.register
-	def parse_token(self, token: Format.Literal, src, *, lineno, offset, usage, was):
+	def parse_token(self, token: Format.Literal, sldef: SlDef, src, *, lineno, offset, usage, was):
 		try: return [self._parse_token_cache_literal[token.literal, lineno, offset]]
 		except KeyError: pass
 
@@ -114,10 +115,9 @@ class Lexer:
 
 		r = self._parse_token_cache_literal[token.literal, lineno, offset] = Token(token.literal, name=token.name, typename=token.typename, lineno=lineno, offset=offset, length=token.length) # TODO: name
 		return [r]
-	_parse_token_cache_literal = dict()
 
 	@_parse_token.register
-	def parse_token(self, token: Format.Pattern, src, *, lineno, offset, usage, was):
+	def parse_token(self, token: Format.Pattern, sldef: SlDef, src, *, lineno, offset, usage, was):
 		try: return [self._parse_token_cache_pattern[token.pattern, lineno, offset]]
 		except KeyError: pass
 
@@ -128,22 +128,21 @@ class Lexer:
 
 		r = self._parse_token_cache_pattern[token.pattern, lineno, offset] = Token(t, name=token.name, typename=token.typename, lineno=lineno, offset=offset, length=len(t))
 		return [r]
-	_parse_token_cache_pattern = dict()
 
 	@_parse_token.register
-	def parse_token(self, token: Format.Optional, src, *, lineno, offset, usage, was):
-		try: return self.parse_token(token.token, src, lineno=lineno, offset=offset, usage=usage, was=was)
+	def parse_token(self, token: Format.Optional, sldef: SlDef, src, *, lineno, offset, usage, was):
+		try: return self.parse_token(token.token, sldef, src, lineno=lineno, offset=offset, usage=usage, was=was)
 		except SlSyntaxExpectedNothingError: raise
 		except SlSyntaxError: return []
 
-	def _parse_token_list(self, token: Format.TokenList, src, *, lineno, offset, usage, was, _empty=False, _full=False, _stripspace=True):
+	def _parse_token_list(self, token: Format.TokenList, sldef: SlDef, src, *, lineno, offset, usage, was, _empty=False, _full=False, _stripspace=True):
 		res = list()
 		errors = list()
 
 		for ii, i in enumerate((token.sequence if (isinstance(token, Format.TokenSequence)) else itertools.repeat(token.token))):
 			if (not isinstance(token, Format.TokenSequence) and (_empty or res) and (not src or src.isspace())): break
 
-			try: tl = self.parse_token(i, src, lineno=lineno, offset=offset, usage=usage, was=was)
+			try: tl = self.parse_token(i, sldef, src, lineno=lineno, offset=offset, usage=usage, was=was)
 			except SlSyntaxExpectedNothingError:
 				if (isinstance(token, Format.TokenSequence)): break
 				else: raise
@@ -180,19 +179,19 @@ class Lexer:
 			#	repr(src),
 			#	srcoff,
 			#	repr(src[srcoff:]),
-			#	self.lstripspace(src[srcoff:]),
+			#	self.lstripspace(sldef, src[srcoff:]),
 			#sep='\n', end='\n\n')
 
 			assert (0 <= srcoff <= len(src))
 			if (ii or _stripspace):
-				ws, src = self.lstripspace(src[srcoff:])
+				ws, src = self.lstripspace(sldef, src[srcoff:])
 				offset += ws
 				assert (not src[:1].replace('\n', '').isspace())
 			else: src = src[srcoff:]
 
-			if (src.startswith(self.definitions.continuation.format.token)):
-				(ws, comment), (offset, src) = self.lstripcont(src)
-				if (comment): tl += self.parse_token(self.sldef.definitions['linecomment'].format, comment, lineno=lineno, offset=ws, usage=usage, was=was)
+			if (src.startswith(sldef.definitions.continuation.format.token)):
+				(ws, comment), (offset, src) = self.lstripcont(sldef, src)
+				if (comment): tl += self.parse_token(sldef.definitions.linecomment.format, sldef, comment, lineno=lineno, offset=ws, usage=usage, was=was)
 				lineno += 1
 				assert (not src[:1].replace('\n', '').isspace())
 
@@ -207,24 +206,24 @@ class Lexer:
 
 	@_parse_token.register
 	@suppress_tb
-	def parse_token(self, token: Format.ZeroOrMore, src, *, lineno, offset, usage, was, _full=False):
-		return self._parse_token_list(token, src, lineno=lineno, offset=offset, usage=usage, was=was, _empty=True, _full=_full)
+	def parse_token(self, token: Format.ZeroOrMore, sldef: SlDef, src, *, lineno, offset, usage, was, _full=False):
+		return self._parse_token_list(token, sldef, src, lineno=lineno, offset=offset, usage=usage, was=was, _empty=True, _full=_full)
 
 	@_parse_token.register
 	@suppress_tb
-	def parse_token(self, token: Format.OneOrMore, src, *, lineno, offset, usage, was):
-		return self._parse_token_list(token, src, lineno=lineno, offset=offset, usage=usage, was=was, _empty=False)
+	def parse_token(self, token: Format.OneOrMore, sldef: SlDef, src, *, lineno, offset, usage, was):
+		return self._parse_token_list(token, sldef, src, lineno=lineno, offset=offset, usage=usage, was=was, _empty=False)
 
 	@_parse_token.register
-	def parse_token(self, token: Format.Sequence, src, *, lineno, offset, usage, was):
-		return self._parse_token_list(token, src, lineno=lineno, offset=offset, usage=usage, was=was)
+	def parse_token(self, token: Format.Sequence, sldef: SlDef, src, *, lineno, offset, usage, was):
+		return self._parse_token_list(token, sldef, src, lineno=lineno, offset=offset, usage=usage, was=was)
 
 	@_parse_token.register
-	def parse_token(self, token: Format.Choice, src, *, lineno, offset, usage, was):
+	def parse_token(self, token: Format.Choice, sldef: SlDef, src, *, lineno, offset, usage, was):
 		errors = list()
 
 		for i in token.choices:
-			try: return self.parse_token(i, src, lineno=lineno, offset=offset, usage=usage, was=was)
+			try: return self.parse_token(i, sldef, src, lineno=lineno, offset=offset, usage=usage, was=was)
 			except SlSyntaxError as ex: errors.append(ex)
 		else:
 			#if (errors): raise SlSyntaxMultiExpectedError.from_list(errors, usage=usage)
@@ -232,16 +231,16 @@ class Lexer:
 			else: raise SlSyntaxExpectedOneOfError(token, tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=usage)
 
 	@_parse_token.register
-	def parse_token(self, token: Format.Joint, src, *, lineno, offset, usage, was):
-		res = self._parse_token_list(token, src, lineno=lineno, offset=offset, usage=usage, was=was, _stripspace=False)
+	def parse_token(self, token: Format.Joint, sldef: SlDef, src, *, lineno, offset, usage, was):
+		res = self._parse_token_list(token, sldef, src, lineno=lineno, offset=offset, usage=usage, was=was, _stripspace=False)
 		return [Token(str().join(i.token for i in res), name=(res[-1].name if (len(res) == 1) else token.name), typename=(res[-1].typename if (len(res) == 1) else token.typename), lineno=res[0].lineno, offset=res[0].offset, length=sum(i.length for i in res))]
 
 	parse_token = _parse_token; del _parse_token
 
-	def parse_string(self, src, name='<string>', *, lnooff=0, offset=0, live=None):
-		lineno = lnooff+1
-		token = self.definitions.code.format
-		tl = self.parse_token(token, src.rstrip('\n')+'\n', lineno=lineno, offset=offset, usage=token.name, was=frozenset(), _full=True)
+	def parse_string(self, sldef: SlDef, src: str, name: str = '<string>', *, lnooff: int = 0, offset: int = 0):
+		lineno = (lnooff + 1)
+		token = sldef.definitions.code.format
+		tl = self.parse_token(token, sldef, src.rstrip('\n')+'\n', lineno=lineno, offset=offset, usage=token.name, was=frozenset(), _full=True)
 
 		#if (nlcnt := sum(i.nlcnt for i in tl)): length = (sum((l[-1].offset + l[-1].length) for k, v in itertools.groupby(tl, key=operator.attrgetter('lineno')) if (l := tuple(v))) - tl[0].offset)
 		#else:
@@ -249,10 +248,6 @@ class Lexer:
 
 		#if ((leftover := src[length:]) and not leftover.isspace()): raise SlSyntaxExpectedNothingError(tok(leftover), lineno=(lineno + nlcnt), offset=(tl[-1].offset + tl[-1].length if (tl[-1].lineno == lineno + nlcnt) else 0), length=toklen(leftover))
 		return Expr(tl, name=name, lineno=lineno, offset=offset, length=length)
-
-	@property
-	def definitions(self):
-		return self.sldef.definitions
 
 # by Sdore, 2021-24
 #  slang.sdore.me

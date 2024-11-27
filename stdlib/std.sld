@@ -28,7 +28,7 @@ class void {}
 class bool {
 	castable to int;
 
-	bool operator !;
+	bool !operator;
 }
 
 class int {
@@ -58,7 +58,7 @@ class int {
 	int operator |int;
 	int operator ^int;
 
-	range operator 'to' int;
+	range operator to int;
 
 	int popcount();
 
@@ -97,7 +97,7 @@ class char {
 	char operator -int;
 	char operator *int;
 
-	range operator 'to' char;
+	range operator to char;
 }
 
 class str {

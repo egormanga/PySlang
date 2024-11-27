@@ -1,111 +1,48 @@
 # .sld syntax definition
 
 
-## Primitive
+code: (((Slang.import ';') | classdef | Slang.comment) \n+)*
 
-unopexpr: unop | ('post' unpostop)
-binopexpr: binop type
+classdef: 'class' identifier ('<' identifier)* block
+
+identifier: Slang.identifier
+
+block: '{' \n* ((Slang.comment | (definition ';')) \n*)* \n* '}'
+
+definition: typename | castable | iterable | operator | methoddef | fielddef
+
+typename: 'typename' identifier ('[' Slang.integer? ']')?
+
+castable: 'castable' 'to' identifier
+
+iterable: 'iterable' type
+
+type: identifier ('[' Slang.integer ']')?
+
+preop: Slang.unop
+binop: Slang.binop type
+postop: binop | Slang.unpostop | itemget | funccall
+operator: typeref (preop 'operator' | 'operator' postop)
+
+typeref: (Slang.decimal '.')? type
+
 itemget: '[' type ']' # TODO: slices
-operator: type 'operator' (unopexpr | binopexpr | itemget)
 
-castable: 'castable' 'to' type
+funccall: '(' (argdef (',' argdef)*)? ')'
 
-call: 'call' type '(' argdef (',' argdef)* ')'
+argdef: '*' type | '/' | '*' | type identifier? ('[' integer ']' | '**' | '?' | '+' | '*' | '=' Slang.literal)?
 
-definition: operator | castable | call | methoddef | fielddef
+methoddef: typeref identifier funccall
 
-
-## Non-final
-
-typename: modifier* type
-
-argdef: typename? varname ('[' number ']' | '?' | '+' | '*' | '**' | '=' expr)? | '*' | '/'
-
-methoddef: typename identifier '(' argdef (',' argdef)* ')'
-
-fielddef: typename identifier (',' identifier)*
-
-classblock: '{' (definition ';')* '}'
-defkeyword: 'init' | 'constr' | 'property' | 'repr' | 'eq'
-keyworddefargs: argdef | '(' argdef (',' argdef)* ')'
-keyworddef: defkeyword keyworddefargs classblock
-
-## Final
-
-@import: 'import' (identifier ':')? (identifier '/')* identifier (':' (identifier | '*'))?  # ns:path/to/package:names
-
-@classdef: 'class' identifier ('(' identifier (',' identifier)* ')')? '{' classblock '}'
+fielddef: typeref identifier (',' identifier)*
 
 
-## Modifiers
+:linecomment: Slang.linecomment
 
-modifier: 'const' | 'static' | 'volatile'
+:whitespace: ' ' | \t | \r | \v | \f
 
-
-## Identifiers
-
-identifier: /[^\W\d][\w]*/
-
-varname: ['.'? identifier]
+:continuation: \\
 
 
-## Data types
-
-type: ['u'? ('int' | 'float' | 'complex')] |
-      [('i' | 'u' | 'u'? ('f' | 'c')) ('8' | '16' | '32' | '64' | '128')] |
-      'bool' | 'byte' | 'char' | 'str' | 'void' | 'auto'
-
-
-## Literals
-
-number: /[^\D0]\d*/
-
-char: /\\ ([\\'"abefnrtv] | N\{[0-9A-Z\ -]+\} | u[0-9A-Fa-f]{4} | U[0-9A-Fa-f]{8} | x[0-9A-Fa-f]{1,2} | [0-7]{1,3}) | [^\\]/
-
-character: [\' char \']
-
-string: ['f'? ('"' char* '"' | \' char* \')]
-
-list: '[' type (':' expr (',' expr)*)? ']'
-
-tuple: '(' type expr (',' type expr)* ')'
-
-map: '{' expr ':' expr (',' expr ':' expr)* '}'
-
-set: '{' expr (',' expr)* '}'
-
-literal: number | character | string | list | tuple | map | set
-
-
-## Operators
-
-unchop: '!' | '+' | '-' | '~'
-undchop: '++' | '--'
-unkwop: 'not'
-unmathop: 'floor' | 'ceil' | 'round' |
-          ['i'? 'sqrt'] |
-          ['exp' 'm1'?] |
-          ('ln' | 'lb' | 'lg' | ['log' ('2' | '10' | '1p')]) |
-          ['a'? (('sin' | 'cos' | ('tan' | 'tg') | ('cotan' | 'ctg')) 'h'? | 'tan2')]
-unop: unchop | undchop | [\' (unkwop | unmathop) \']
-
-unchpostop: '!'
-undchpostop: '++' | '--' | '**'
-unpostop: unchpostop | undchpostop
-
-binchop: '%' | '&' | '*' | '+' | '-' | '/' | '<' | '=' | '>' | '^' | '|'
-bindchop: '==' | '**' | '//' | '<<' | '>>'
-binkwop: 'is' | 'is not' | 'in' | 'not in' | 'not' | 'and' | 'but' | 'xor' | 'or' | 'isof'
-binmathop: 'pow'
-binop: binchop | bindchop | [\' (binkwop | binmathop) \']
-
-
-## Specials
-
-special: \\ | '..' | ':=' | ',' | '?' | '=' | '(' | ')' | '{' | '}'
-
-whitespace: ' ' | \t | \r | \v | \f
-
-
-# by Sdore, 2021-22
+# by Sdore, 2021-24
 #  slang.sdore.me

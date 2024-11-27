@@ -42,7 +42,7 @@ finallyclause: 'finally' block
 
 vardefassignment: identifier ('=' expr | funccallargs)?
 
-argdef: '/' | '*' | type identifier ('[' integer ']' | '?' | '+' | '*' | '**' | '=' expr)?
+argdef: '/' | '*' | type identifier ('[' integer ']' | '**' | '?' | '+' | '*' | '=' expr)?
  # `, /,` — end of positional-only arguments
  # `, *,` — start of keyword-only arguments
  # in the order of positional argument capturing precedence:
@@ -53,7 +53,7 @@ argdef: '/' | '*' | type identifier ('[' integer ']' | '?' | '+' | '*' | '**' | 
  # `arg**` — packs a dict with all leftover keyword arguments
  # `arg=val` — optional argument with a default value
 
-classargdef: type classvarname ('?' | '+' | '*' | '**' | '=' expr)?
+classargdef: type classvarname ('**' | '?' | '+' | '*' | '=' expr)?
 
 lambda: '(' (argdef (',' argdef)*)? ')' '->' type (block | '=' expr)
 
@@ -154,7 +154,7 @@ continue: 'continue' integer?
 
 fallthrough: 'fallthrough'
 
-import: 'import' (identifier ':')? (identifier '/')* identifier (':' (identifier | '*'))?  # ns:path/to/package:names
+import: 'import' [identifier ':']? [identifier '/']* identifier (':' (identifier (',' identifier)* | '*'))?  # ns:path/to/package: some, names
 
 delete: 'delete' varname
 
@@ -191,7 +191,7 @@ classvarname: classattrget | identifier
 
 boolean: 'true' | 'false'
 
-decimal: /[^\D0]\d*|0/
+decimal: /0|[^\D0]\d*/
 binary: /[0-1]+/
 ternary: /[0-2]+/
 octal: /[0-7]+/
