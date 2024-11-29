@@ -26,7 +26,7 @@ unopexpr: unpreopexpr | unpostopexpr
 
 value: binopexpr | unopexpr | itemget | funccall | varname | lambda | literal
 expr: value | '(' expr ')'
- # e.g.: `f(x+3)` is an instance of `expr`, also `f`, `x+3` and `x` are `expr`s too.
+ # e.g.: `f(x+3)` is an instance of `expr`, also each of `f`, `x+3`, `x` and `3` are.
 
 
 ## Non-final
@@ -55,7 +55,7 @@ argdef: '/' | '*' | type identifier ('[' integer ']' | '**' | '?' | '+' | '*' | 
 
 classargdef: type classvarname ('**' | '?' | '+' | '*' | '=' expr)?
 
-lambda: '(' (argdef (',' argdef)*)? ')' '->' type (block | '=' expr)
+lambda: '(' (argdef (',' argdef)* ','?)? ')' '->' type (block | '=' expr)
 
 callarg: '*'? expr
 callargs: callarg (',' callarg)*
@@ -63,7 +63,7 @@ callargs: callarg (',' callarg)*
 callkwarg: identifier ('=' | ':') expr | '=' identifier | '**' expr
 callkwargs: callkwarg (',' callkwarg)*
 
-funccallargs: '(' (callargs (',' callkwargs)? | callkwargs)? ')'
+funccallargs: '(' ((callargs (',' callkwargs)? | callkwargs) ','?)? ')'
 
 itemget: expr '[' expr ']' # TODO: slices
 
@@ -109,9 +109,9 @@ classdefstatement: comment |
                    vardef |
                    classkeyworddef
 
-funcdef: (type | 'def') identifier '(' (argdef (',' argdef)*)? ')' (block | '=' expr)
+funcdef: (type | 'def') identifier '(' (argdef (',' argdef)* ','?)? ')' (block | '=' expr)
 
-classfuncdef: (type | 'method') identifier '(' (argdef (',' argdef)*)? ')' (classblock | '=' expr)
+classfuncdef: (type | 'method') identifier '(' (argdef (',' argdef)* ','?)? ')' (classblock | '=' expr)
 
 keywordexpr: return | raise | throw | resume | break | continue | fallthrough | import | delete | assert | super | breakpoint
 
@@ -127,15 +127,15 @@ doblock: 'do' block (\n* catchclause)* (\n* 'else' block)? (\n* finallyclause)?
 
 vardef: type vardefassignment (',' vardefassignment)*
 
-assignment: varname (',' varname)* [binop? '='] expr
+assignment: varname (',' varname)* ','? [binop? '='] expr
 
-classassignment: classvarname (',' classvarname)* [binop? '='] expr
+classassignment: classvarname (',' classvarname)* ','? [binop? '='] expr
 
 funccall: expr funccallargs
 
 keyworddef: defkeyword block
 
-classkeyworddef: classdefkeyword ('(' (classargdef (',' classargdef)*)? ')')? (classblock | ';')
+classkeyworddef: classdefkeyword ('(' (classargdef (',' classargdef)* ','?)? ')')? (classblock | ';')
 
 
 ## Keywords
@@ -154,7 +154,7 @@ continue: 'continue' integer?
 
 fallthrough: 'fallthrough'
 
-import: 'import' [identifier ':']? [identifier '/']* identifier (':' (identifier (',' identifier)* | '*'))?  # ns:path/to/package: some, names
+import: 'import' [identifier ':']? [identifier '/']* identifier (':' (identifier (',' identifier)* ','? | '*'))?  # ns:path/to/package: some, names
 
 delete: 'delete' varname
 
@@ -218,13 +218,13 @@ character: [\' (char | \") \']
 
 string: ['f'? ('"' (char | \')* '"' | \' (char | '"')* \')]
 
-tuple: '(' type expr (',' type expr)* ')'
+tuple: '(' ((type expr ',')+ (type expr)?)? ')'
 
-list: '[' type (':' expr (',' expr)*)? ']'
+list: '[' type (':' expr (',' expr)* ','?)? ']'
 
-set: '{' expr (',' expr)* '}'
+set: '{' expr (',' expr)* ','? '}'
 
-map: '{' expr ':' expr (',' expr ':' expr)* '}'
+map: '{' expr ':' expr (',' expr ':' expr)* ','? '}'
 
 literal: boolean | number | character | string | tuple | list | set | map
 

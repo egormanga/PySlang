@@ -92,8 +92,9 @@ class SlSyntaxMultiExpectedError(SlSyntaxExpectedError):
 		self.errlist = errlist
 		self.sl = (len(scope)+6 if (scope is not None) else 0)
 		self._expected = tuple(j for i in expected for j in (i._expected if (isinstance(i, SlSyntaxMultiExpectedError)) else (i,)))
+		common_usage = os.path.commonprefix(tuple(i.usage[::-1] for i in self._expected))[::-1]
 		super().__init__(
-			expected = (S(',\n'+' '*(self.sl+9)).join(Stuple((f"{S(', ').join(Stuple(getattr(i.expected, 'name', i.expected) for i in choices).uniquize(str.casefold), last=' or ')} at line {lineno}, {f'offset {offset}' if (offset >= 0) else 'the end of line'}" + (f' (for {usage})' if (usage is not None) else '')) for (lineno, offset, usage), choices in itertools.groupby(self._expected, key=lambda x: (x.lineno, x.offset, x.usage))).strip('nothing').uniquize(str.casefold), last=f",\n{' '*(self.sl+6)}or ") or 'nothing'), #if (not isinstance(i, SlSyntaxMultiExpectedError)) else str(i.expected)
+			expected = (S(',\n'+' '*(self.sl+9)).join(Stuple((f"{S(', ').join(Stuple(getattr(i.expected, 'name', i.expected) for i in choices).uniquize(str.casefold), last=' or ')} at line {lineno}, {f'offset {offset}' if (offset >= 0) else 'the end of line'}" + (f' (for {usage.removesuffix(common_usage) if (usage not in common_usage) else usage})' if (usage is not None) else '')) for (lineno, offset, usage), choices in itertools.groupby(self._expected, key=lambda x: (x.lineno, x.offset, x.usage))).strip('nothing').uniquize(str.casefold), last=f",\n{' '*(self.sl+6)}or ") or 'nothing'), #if (not isinstance(i, SlSyntaxMultiExpectedError)) else str(i.expected)
 			found = (S(',\n'+' '*(self.sl+6)).join(Stuple((f"{getattr(i.found, 'name', i.found)} at line {i.lineno}, {f'offset {i.offset}' if (i.offset >= 0) else 'the end of line'}" if (not isinstance(i, SlSyntaxMultiExpectedError)) else str(i.found)) for i in found).strip('nothing').uniquize(str.casefold), last=f",\n{' '*(self.sl+2)}and ") or 'nothing'),
 			#{i.offset+1 if (i.offset < -1) else ''}
 			scope = scope,

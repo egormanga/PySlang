@@ -230,6 +230,11 @@ class Instrs:
 		return f"""function {self.load(x.identifier)}{f'''(...) local arg<const> = table.pack(...); {f"setmetatable(arg, {{__index = {{{', '.join(defaults)}}}}}); " if (defaults) else ''}{'; '.join(self.add(i, index=ii) for ii, i in enumerate(x.argdef, 1))}''' if (x.argdef) else '()'}{self.add(x.block) if (x.block) else f"{';'*bool(x.argdef)} return {self.load(x.expr)} "}end\n"""
 
 	@dispatch
+	def add(self, x: ASTClassFuncdefNode, *, classname: str):
+		defaults = tuple(filter(None, map(self.load, (x.argdef or ()))))
+		return f"""function {classname}:{self.load(x.identifier)}{f'''(...) local arg<const> = table.pack(...); {f"setmetatable(arg, {{__index = {{{', '.join(defaults)}}}}}); " if (defaults) else ''}{'; '.join(self.add(i, index=ii) for ii, i in enumerate(x.argdef, 1))}''' if (x.argdef) else '()'}{self.add(x.classblock) if (x.classblock) else f"{';'*bool(x.argdef)} return {self.load(x.expr)} "}end\n"""
+
+	@dispatch
 	def add(self, x: ASTKeywordExprNode):
 		return self.add(x.value)
 
@@ -253,11 +258,7 @@ class Instrs:
 	@dispatch
 	def add(self, x: ASTClassdefNode):
 		classname = self.load(x.classname)
-		bases = tuple(map(self.load, x.bases))
-		assert (len(bases) <= 1) # TODO: multiple bases
-		return (f"{classname} = "
-		        + (f"{only(bases)}:new()" if (bases) else "setmetatable({new = function(self, obj) obj = obj or {}; self.__index = self; setmetatable(obj, self):init(); return obj; end, init = function() end, destroy = function() end}, {__call = function(self, ...) obj = self:new(); obj:constr(...); return obj; end})")
-		        + f"\n{self.add(x.classdefblock, classname=classname)}\n")
+		return (f"{classname} = class({', '.join(map(self.load, x.bases))})\n{self.add(x.classdefblock, classname=classname)}\n")
 
 	@dispatch
 	def add(self, x: ASTVardefNode, *, classname=None):
@@ -319,6 +320,7 @@ class Instrs:
 
 	@dispatch
 	def load(self, x: ASTIdentifierNode):
+		if (x.identifier == 'super'): return 'self.__super'
 		return x.identifier
 
 	@dispatch

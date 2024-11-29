@@ -1,13 +1,13 @@
 # .sld syntax definition
 
 
-code: (((Slang.import ';') | classdef | Slang.comment) \n+)*
+code: ((Slang.import ';' | classdef | Slang.comment) \n+)*
 
 classdef: 'class' identifier ('<' identifier)* block
 
 identifier: Slang.identifier
 
-block: '{' \n* ((Slang.comment | (definition ';')) \n*)* \n* '}'
+block: '{' \n* ((Slang.comment | definition ';') \n*)* \n* '}'
 
 definition: typename | castable | iterable | operator | methoddef | fielddef
 

@@ -24,7 +24,8 @@ from utils.nolog import *
 SLD_DEF = os.path.join(os.path.dirname(sldef.__file__), 'sld.sldef')
 
 class ADTNode(ASTNode):
-	pass
+	def optimize(self, ns, level):
+		pass
 
 class ADTSimpleNode(ADTNode):
 	def analyze(self, ns):

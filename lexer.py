@@ -82,13 +82,13 @@ class Lexer:
 	@_parse_token.register
 	def parse_token(self, token: Format.Reference, sldef: SlDef, src, *, lineno, offset, usage, was):
 		if ((location := (lineno, offset, token.name)) in was):
-			if ((*location, None) in was): raise SlSyntaxExpectedNothingError(tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=token.name)
-			was |= {(*location, None)}
+			if ((end := (*location, None)) in was): raise SlSyntaxExpectedNothingError(tok(src), lineno=lineno, offset=offset, length=toklen(src), usage=f"{token.name} for {usage}")
+			was |= {end}
 
 		ns, _, name = token.name.rpartition('.')
 		if (ns): sldef = sldef.definitions[ns]
-		tl = self.parse_token(sldef.definitions[name].format, sldef, src, lineno=lineno, offset=offset, usage=token.name, was=(was | {location}))
-		if (not tl): raise SlSyntaxExpectedMoreTokensError(token, lineno=lineno, offset=-1, length=0, usage=token.name)
+		tl = self.parse_token(sldef.definitions[name].format, sldef, src, lineno=lineno, offset=offset, usage=f"{token.name} for {usage}", was=(was | {location}))
+		if (not tl): raise SlSyntaxExpectedMoreTokensError(token, lineno=lineno, offset=-1, length=0, usage=f"{token.name} for {usage}")
 
 		assert (tl[0].offset == offset)
 
@@ -98,10 +98,7 @@ class Lexer:
 		lines = src.split('\n', maxsplit=nlcnt)
 		length = (offset + sum(map(len, lines[:-1])) + nlcnt - tl[0].offset)
 
-		#dlog(f"{token} for {usage} at {lineno, offset} {length=}:", *map(str, tl),
-		#	length,
-		#	repr(src[length:]),
-		#sep='\n', end='\n\n')
+		#dlog(f"{token} for {usage} at {lineno, offset} {length=}:", *map(str, tl), repr(src[length:]), sep='\n', end='\n\n')
 
 		return [Expr(tl, name=token.name, lineno=oldlineno, offset=oldoffset, length=length)]
 

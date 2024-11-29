@@ -1,6 +1,48 @@
 -- Slang stdlib for Lua --
 
 
+function class(...)
+	local bases = table.pack(...)
+
+	if #bases == 1 then
+		local cls = bases[1]:new()
+		cls.__super = getmetatable(cls)
+		return cls
+	end
+
+	local cls = {
+		new = function(self, obj)
+			obj = obj or {}
+			if #bases == 0 then self.__index = self end
+			setmetatable(obj, self):init()
+			return obj
+		end,
+		init = function() end,
+		destroy = function() end,
+	}
+
+	local meta = {
+		__call = function(self, ...)
+			obj = self:new()
+			obj:constr(...)
+			return obj
+		end,
+	}
+
+	if #bases == 0 then return setmetatable(cls, meta) end
+
+	meta.__index = function(self, k)
+		for ii, i in ipairs(bases) do
+			if i[k] then return i[k] end
+		end
+	end
+
+	cls.__index = cls
+	cls.__super = setmetatable({}, meta)
+
+	return setmetatable(cls, meta)
+end
+
 _meta = {
 	__call = function(self, obj) obj = type(obj) == 'table' and obj or {obj}; self.__index = self; return setmetatable(obj, self) end,
 }

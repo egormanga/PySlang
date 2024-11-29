@@ -70,6 +70,7 @@ class ASTNode(metaclass=ASTNodeMeta):
 					except AttributeError: pass
 					else: j.validate(ns)
 
+	@abc.abstractmethod
 	def optimize(self, ns: Namespace, level: int = 0) -> ASTNode | None:
 		cls = self.__class__
 
@@ -92,9 +93,9 @@ class ASTNode(metaclass=ASTNodeMeta):
 			name = (last(i.name.rpartition('.')) if (i.name.replace('.', '').isidentifier()) else i.name)
 			pattern = None
 
+			if (keyword.iskeyword(name) or keyword.issoftkeyword(name)): name += '_'
+			if (not isinstance(i, Expr) and i.typename == 'joint' and annotations.get(name) is not str): name += '_'
 			key = name
-			if (keyword.iskeyword(key) or keyword.issoftkeyword(key)): key += '_'
-			if (not isinstance(i, Expr) and i.typename == 'joint' and key in annotations): key += '_'
 
 			try: a = annotations[key]
 			except KeyError:
@@ -202,6 +203,9 @@ class ASTNode(metaclass=ASTNodeMeta):
 class ASTSimpleNode(ASTNode):
 	def analyze(self, ns):
 		pass
+
+	def optimize(self, ns, level):
+		return super().optimize(ns, level)
 
 class ASTChoiceNode(ASTNode):
 	def __str__(self):
@@ -373,8 +377,6 @@ class ASTClassdefBlockNode(ASTNode):
 
 	def analyze(self, ns):
 		if (self.classdefcode): self.classdefcode.analyze(ns)
-		for i in (self.classdefstatement or ()):
-			i.analyze(ns)
 
 	def optimize(self, ns, level=0):
 		if (self.classdefcode): self.classdefcode = self.classdefcode.optimize(ns, level)
@@ -685,6 +687,15 @@ class ASTArgdefNode(ASTNode):
 
 		ns.define(self.identifier, self.type_, value=self.expr)
 
+	def optimize(self, ns, level):
+		self.type_ = self.type_.optimize(ns, level)
+		self.identifier = self.identifier.optimize(ns, level)
+		if (self.expr): self.expr = self.expr.optimize(ns, level)
+
+		cls, self = self.__class__, super().optimize(ns, level)
+		if (isinstance(self, cls) and (not self.type_ or not self.identifier)): return None
+		else: return self
+
 class ASTClassArgdefNode(ASTNode):
 	type_: ASTTypeNode
 	classvarname: ASTClassVarnameNode
@@ -700,6 +711,15 @@ class ASTClassArgdefNode(ASTNode):
 		if (self.expr): self.expr.analyze(ns)
 
 		ns.define(self.classvarname, self.type_, value=self.expr)
+
+	def optimize(self, ns, level):
+		self.type_ = self.type_.optimize(ns, level)
+		self.classvarname = self.classvarname.optimize(ns, level)
+		if (self.expr): self.expr = self.expr.optimize(ns, level)
+
+		cls, self = self.__class__, super().optimize(ns, level)
+		if (isinstance(self, cls) and (not self.type_ or not self.classvarname)): return None
+		else: return self
 
 class ASTCallArgNode(ASTNode):
 	star: Literal['*'] | None
@@ -821,6 +841,15 @@ class ASTAttrgetNode(ASTNode):
 		self.expr.analyze(ns)
 		self.identifier.analyze(ns)
 
+	def optimize(self, ns, level):
+		self.expr = self.expr.optimize(ns, level)
+		self.attrop = self.attrop.optimize(ns, level)
+		self.identifier = self.identifier.optimize(ns, level)
+
+		cls, self = self.__class__, super().optimize(ns, level)
+		if (isinstance(self, cls) and (not self.expr or not self.attrop or not self.identifier)): return None
+		else: return self
+
 class ASTClassAttrgetNode(ASTNode):
 	attrselfop: ASTAttrSelfOpNode | None
 	expr: ASTExprNode | None
@@ -833,6 +862,16 @@ class ASTClassAttrgetNode(ASTNode):
 	def analyze(self, ns):
 		self.expr.analyze(ns)
 		self.identifier.analyze(ns)
+
+	def optimize(self, ns, level):
+		if (self.attrselfop): self.attrop = self.attrselfop.optimize(ns, level)
+		if (self.expr): self.expr = self.expr.optimize(ns, level)
+		if (self.attrop): self.attrop = self.attrop.optimize(ns, level)
+		self.identifier = self.identifier.optimize(ns, level)
+
+		cls, self = self.__class__, super().optimize(ns, level)
+		if (isinstance(self, cls) and (not (self.attrselfop or self.expr and self.attrop) or not self.identifier)): return None
+		else: return self
 
 
 ## Final
@@ -1134,10 +1173,21 @@ class ASTClassdefNode(ASTNode):
 		return f"""{self.class_} {S(' < ').join(self.identifier)}{self.classdefblock}"""
 
 	def analyze(self, ns):
-		self.identifier.analyze(ns)
+		for i in self.identifier:
+			i.analyze(ns)
 
 		classns = ns.derive(self)
 		self.classdefblock.analyze(classns)
+
+	def optimize(self, ns, level=0):
+		self.identifier = list(filter(None, (i.optimize(ns, level) for i in self.identifier)))
+
+		classns = ns.derive(self)
+		self.classdefblock = self.classdefblock.optimize(classns, level)
+
+		cls, self = self.__class__, super().optimize(ns, level)
+		if (isinstance(self, cls) and (not self.identifier or not self.classdefblock)): return None
+		else: return self
 
 	@property
 	def classname(self):
@@ -1175,7 +1225,7 @@ class ASTAssignmentNode(ASTNode):
 	expr: ASTExprNode
 
 	def __str__(self):
-		return f"{S(', ').join(self.varname)} {self.assignment} {self.expr}"
+		return f"{S(', ').join(self.varname)}{','*(len(self._comma) >= len(self.varname))} {self.assignment} {self.expr}"
 
 	def analyze(self, ns):
 		for i in self.varname:
@@ -1199,7 +1249,7 @@ class ASTClassAssignmentNode(ASTNode):
 	expr: ASTExprNode
 
 	def __str__(self):
-		return f"{S(', ').join(self.classvarname)} {self.assignment} {self.expr}"
+		return f"{S(', ').join(self.classvarname)}{','*(len(self._comma) >= len(self.classvarname))} {self.assignment} {self.expr}"
 
 	def analyze(self, ns):
 		for i in self.classvarname:
@@ -1321,7 +1371,7 @@ class ASTThrowNode(ASTNode):
 		if (isinstance(self, cls) and not self.expr): return None
 		else: return self
 
-class ASTResumeNode(ASTNode):
+class ASTResumeNode(ASTSimpleNode):
 	resume: 'resume'
 	integer: int | None
 
@@ -1331,7 +1381,7 @@ class ASTResumeNode(ASTNode):
 	def validate(self, ns):
 		assert (self.integer > 0)
 
-class ASTBreakNode(ASTNode):
+class ASTBreakNode(ASTSimpleNode):
 	break_: 'break'
 	integer: int | None
 
@@ -1341,7 +1391,7 @@ class ASTBreakNode(ASTNode):
 	def validate(self, ns):
 		assert (self.integer > 0)
 
-class ASTContinueNode(ASTNode):
+class ASTContinueNode(ASTSimpleNode):
 	continue_: 'continue'
 	integer: int | None
 
@@ -1371,6 +1421,13 @@ class ASTImportNode(ASTNode):
 	def analyze(self, ns):
 		for i in self.identifier:
 			i.analyze(ns)
+
+	def optimize(self, ns, level):
+		self.identifier = self.identifier.optimize(ns, level)
+
+		cls, self = self.__class__, super().optimize(ns, level)
+		if (isinstance(self, cls) and not self.identifier): return None
+		else: return self
 
 	@property
 	def package(self):
@@ -1451,6 +1508,16 @@ class ASTClassVarnameNode(ASTChoiceNode):
 
 ## Literals
 
+class ASTTupleNode(ASTNode):
+	lparen: '('
+	type_: list[ASTTypeNode] | None
+	expr: list[ASTExprNode] | None
+	_comma: list[','] | None
+	rparen: ')'
+
+	def __str__(self):
+		return f"{self.lparen}{S(', ').join(f'{i} {j}' for i, j in zip(self.type_, self.expr))}{','*(len(self.expr) == 1)}{self.rparen}"
+
 class ASTListNode(ASTNode):
 	lbrk: '['
 	type_: ASTTypeNode
@@ -1467,7 +1534,7 @@ class ASTLiteralNode(ASTChoiceNode):
 	number: int | float | complex | str | None
 	character: str | None
 	string: str | None
-	#tuple: ASTTupleNode | None
+	tuple: ASTTupleNode | None
 	list: ASTListNode | None
 
 	def analyze(self, ns):
