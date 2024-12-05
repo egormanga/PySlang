@@ -18,7 +18,7 @@ class Tokenizer:
 
 			for i in ('reference', 'literal', 'regex', 'operator', 'special'):
 				r = getattr(cls, 'find_'+i)(s)
-				n, t = r if (isinstance(r, tuple)) else (r, s[:r]) if (isinstance(r, int) and r > 0) else (0, None)
+				n, t = (r if (isinstance(r, tuple)) else (r, s[:r]) if (isinstance(r, int) and r > 0) else (0, None))
 				if (not t): continue
 				s = s[n:]
 				tokens.append(t)
@@ -136,7 +136,7 @@ class Format(Slots):
 
 		def __str__(self):
 			if ('#' not in self.token): return repr(self.token)
-			return r' \# '.join(repr(i) if (i) else '' for i in self.token.split('#')).strip().join('[]')
+			return r' \# '.join((repr(i) if (i) else '') for i in self.token.split('#')).strip().join('[]')
 
 		@property
 		def name(self):
@@ -218,7 +218,7 @@ class Format(Slots):
 
 	class TokenSequence(TokenList):
 		def __str__(self):
-			return ' '.join(str(i).join('()') if (isinstance(i, Format.Choice)) else str(i) for i in self.tokens)
+			return ' '.join((str(i).join('()') if (isinstance(i, Format.Choice)) else str(i)) for i in self.tokens)
 
 		@property
 		def sequence(self):
@@ -229,7 +229,7 @@ class Format(Slots):
 
 	class Choice(TokenList):
 		def __str__(self):
-			return ' | '.join(str(i).join('()') if (isinstance(i, Format.Choice)) else str(i) for i in self.tokens)
+			return ' | '.join((str(i).join('()') if (isinstance(i, Format.Choice)) else str(i)) for i in self.tokens)
 
 		@property
 		def choices(self):
@@ -237,11 +237,12 @@ class Format(Slots):
 
 		@property
 		def charset(self):
-			if (not all(isinstance(i, Format.Literal) and len(i.token) == 1 for i in self.tokens)): raise AttributeError('charset')
+			if (not all((isinstance(i, Format.Literal) and len(i.token) == 1) for i in self.tokens)): raise AttributeError('charset')
 			return str().join(i.token for i in self.tokens)
 
 	class Joint(TokenSequence):
 		def __str__(self):
+			if (len(self.tokens) == 1 and isinstance(only(self.tokens), Format.Choice)): return str(only(self.tokens)).join('[]')
 			return super().__str__().join('[]')
 
 		def append(self, token):
@@ -252,12 +253,14 @@ class Format(Slots):
 			return self.tokens.pop()
 
 		def flatten(self):
+			if (len(self.tokens) == 1 and isinstance(only(self.tokens), Format.Choice)): return self
+
 			tokens = list()
 			for i in self.tokens:
 				if (tokens and isinstance(tokens[-1], Format.Literal) and isinstance(i, Format.Literal)):
 					tokens[-1] = Format.Literal(tokens[-1].token + i.token)
 				else: tokens.append(i)
-			self.tokens = tokens
+			self.tokens[:] = tokens
 
 			return super().flatten()
 
@@ -280,6 +283,7 @@ class Format(Slots):
 	@classmethod
 	def parse(cls, name, tokens, *, _group=None):
 		if (_group == '['): format, end = cls.Joint([], name=name), ']'
+		elif (_group == ']'): format, end = cls.Choice([], name=name), ']'
 		else: format, end = cls.Choice([cls.Sequence([], name=name)], name=name), (')' if (_group == '(') else None)
 
 		while (tokens):
@@ -288,7 +292,11 @@ class Format(Slots):
 
 			if (token in ('(', '[')): token = cls.parse(name, tokens, _group=token).format
 			elif (token == '|'):
-				if (isinstance(format, (cls.Sequence, cls.Joint))): format = cls.Choice([format], name=name)
+				if (isinstance(format, cls.Joint)):
+					choice = cls.parse(name, tokens, _group=']').format
+					format.tokens, choice.tokens[:0] = [choice], format.tokens
+					break
+				if (isinstance(format, cls.Sequence)): format = cls.Choice([format], name=name)
 				if (not isinstance(format, cls.Choice)): raise WTFException(format, token)
 				if (not format.tokens[-1].tokens or format.tokens[-1].tokens[-1] == '|'): raise WTFException(token)
 				else: format.tokens.append(cls.Sequence([], name=name))

@@ -205,7 +205,7 @@ integer: decimal |
          ['0x' hexadecimal] |
          ['0a' base36]
 
-number: [(decimal \')? integer ('.' ['0'* decimal])? (('e' | 'E') ('+' | '-')? decimal)?]
+number: [(decimal \')? integer ('.' ['0'* decimal])? (('e' | 'E') ('+' | ['-' | '–'])? decimal)?]
 
 char: /\\ (?:[\\'"abefnrtv] |
            N\{[0-9A-Z\ -]+\} |
@@ -231,8 +231,8 @@ literal: boolean | number | character | string | tuple | list | set | map
 
 ## Operators
 
-undchop: '++' | '--'
-unchop: '!' | '+' | '-' | '~'
+undchop: '++' | ['--' | '––']
+unchop: '!' | '+' | ['-' | '–'] | '~'
 unkwop: 'not'
 unmathop: 'floor' | 'ceil' | 'round' |
           ['i'? 'sqrt'] |
@@ -242,11 +242,11 @@ unmathop: 'floor' | 'ceil' | 'round' |
 unop: undchop | unchop | unkwop | unmathop
 
 unchpostop: '!'
-undchpostop: '++' | '--' | '**'
+undchpostop: '++' | ['--' | '––'] | '**'
 unpostop: undchpostop | unchpostop
 
-bindchop: '==' | '**' | '//' | '<<' | '>>'
-binchop: '%' | '&' | '*' | '+' | '-' | '/' | '<' | '>' | '^' | '|'
+bindchop: '==' | '**' | '^/' | '~/' | '//' | '<<' | '>>'
+binchop: '%' | '&' | '*' | '+' | ['-' | '–'] | '/' | '<' | '>' | '^' | '|'
 binkwop: 'is' | 'is not' | 'in' | 'not in' | 'isof' | 'and' | 'but' | 'xor' | 'or' | 'to'
 binmathop: 'pow'
 binop: bindchop | binchop | binkwop | binmathop

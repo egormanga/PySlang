@@ -1558,20 +1558,20 @@ class ASTLiteralNode(ASTChoiceNode):
 ## Operators
 
 class ASTUnOpNode(ASTSimpleNode, ASTChoiceNode):
-	unchop: Literal[sldef.definitions.unchop.format.literals] | None
-	undchop: Literal[sldef.definitions.undchop.format.literals] | None
+	unchop: str | None
+	undchop: str | None
 	unkwop: Literal[sldef.definitions.unkwop.format.literals] | None
 	unmathop: str | None
 
 class ASTUnPostOpNode(ASTSimpleNode, ASTChoiceNode):
-	unchpostop: Literal[sldef.definitions.unchpostop.format.literals] | None
-	undchpostop: Literal[sldef.definitions.undchpostop.format.literals] | None
+	unchpostop: str | None
+	undchpostop: str | None
 
 class ASTBinOpNode(ASTSimpleNode, ASTChoiceNode):
-	binchop: Literal[sldef.definitions.binchop.format.literals] | None
-	bindchop: Literal[sldef.definitions.bindchop.format.literals] | None
+	binchop: str | None
+	bindchop: str | None
 	binkwop: Literal[sldef.definitions.binkwop.format.literals] | None
-	binmathop: Literal[sldef.definitions.binmathop.format.literals] | None
+	binmathop: str | None
 
 
 ## Comments
