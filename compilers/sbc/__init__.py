@@ -161,6 +161,10 @@ class Instrs:
 				self.load(v, **kwargs)
 				found = True
 
+	@dispatch
+	def load(self, x: ASTExprNode, **kwargs):
+		self.load((x.expr or x.value), **kwargs)
+
 
 	## Non-final
 
@@ -180,8 +184,15 @@ class Instrs:
 			self.load(i)
 
 	@dispatch
+	def load(self, x: ASTFunccallArgsNode, **kwargs):
+		for i in (x.callargs or ()):
+			self.load(i)
+
+		# TODO: (x.callkwargs or ())
+
+	@dispatch
 	def load(self, x: ASTAttrgetNode, **kwargs):
-		if (x.expr.varname.identifier.identifier != 'stdio'): raise NotImplementedError(x)
+		if (str(x.expr) != 'stdio'): raise NotImplementedError(x)
 		if (x.attrop.attrselfop.op != '.'): raise NotImplementedError(x)
 		self.builtin(x.identifier.identifier)
 
@@ -200,7 +211,7 @@ class Instrs:
 	@dispatch
 	def add(self, x: ASTVardefNode):
 		for i in x.vardefassignment:
-			self.load(i.expr, typename=x.typename) #sig=Signature.build(x.typename, ns=self.ns))
+			self.load(i.expr, type_=x.type_) #sig=Signature.build(x.type_, ns=self.ns))
 			self.store(i.identifier)
 
 	@dispatch
@@ -210,11 +221,7 @@ class Instrs:
 
 	@dispatch
 	def load(self, x: ASTFunccallNode):
-		nargs = int()
-
-		for i in x.callargs:
-			self.load(i)
-			nargs += 1
+		self.load(x.funccallargs)
 
 		#if (isinstance(x.callable, ASTValueNode) and isinstance(x.callable.value, ASTIdentifierNode) and x.callable.value.identifier in self.ns.signatures):
 		#	raise NotImplementedError()
@@ -224,11 +231,11 @@ class Instrs:
 			#self.add(EXEC)
 		#else:
 		self.load(x.expr)
-		self.add(CALL, nargs)
+		self.add(CALL, x.funccallargs.nargs)
 
 	@dispatch
 	def add(self, x: ASTKeyworddefNode):
-		if (x.defkeyword.keyword == 'main'):
+		if (x.defkeyword.defkeyword == 'main'):
 			name = '<main>'
 			code_ns = self.ns #.derive(name)
 			f_instrs = Instrs(name=name, ns=code_ns, filename=self.filename)
@@ -262,8 +269,13 @@ class Instrs:
 
 
 	## Literals
+
 	@dispatch
-	def load(self, x: ASTLiteralNode, *, typename):
+	def load(self, x: ASTLiteralNode, *, type_: ASTTypeNode):
+		self.load(x, type_=type_.identifier.identifier)
+
+	@dispatch
+	def load(self, x: ASTLiteralNode, *, type_: str = None):
 		#if (sig is None): sig = Signature.build(x, ns=self.ns)
 
 		#if (hasattr(sig, 'fmt')):
@@ -276,15 +288,17 @@ class Instrs:
 		#	t, v = 'c', eval_literal(x).encode('utf-8') # TODO
 		#else: raise NotImplementedError(sig)
 
-		t = typename.type.type
 		if (isinstance(x.number, int)): v = writeVarInt(x.number)
 		else: v = str(x.number).encode() # TODO FIXME
 
-		type_ = bytearray(t.encode('ascii'))
-		type_[-1] |= 0x80
+		if (type_ is None):
+			type_ = 'int' # TODO FIXME
+
+		t = bytearray(type_.encode('ascii'))
+		t[-1] |= 0x80
 
 		self.add(CONST)
-		self.instrs += (type_ + writeVarInt(len(v)) + v)
+		self.instrs += (t + writeVarInt(len(v)) + v)
 
 
 	## Operators
@@ -349,5 +363,5 @@ class SBCCompiler(Compiler):
 
 compiler = SBCCompiler
 
-# by Sdore, 2022-24
+# by Sdore, 2022-25
 #  slang.sdore.me

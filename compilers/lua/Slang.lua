@@ -258,11 +258,11 @@ list = setmetatable({
 	end,
 }, _meta)
 
-_function = setmetatable({
+_func = setmetatable({
 	__tostring = function(x) return tostring(x[1]) end,
 	__in = function(a, b) return bool(b:__has(a[1])) end,
 	__not_in = function(a, b) return ~a:__in(b) end,
-	__isof = function(a, b) return bool(_function == b) end,
+	__isof = function(a, b) return bool(_func == b) end,
 	__and = function(a, b) return bool(a[1] and b) end,
 	__or = function(a, b) return bool(a[1] or b) end,
 	__xor = function(a, b) return bool((a[1] and 1 or 0) ~ (b and 1 or 0) and (a[1] or b)) end,

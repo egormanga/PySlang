@@ -14,14 +14,18 @@ from . import (
 	ASTUnOpNode,
 	ASTUnPostOpNode,
 	Namespace,
+	slang,
 )
-from .. import sldef
+from .. import sldef, stdlib
 from ..lexer import Lexer
 from ..exceptions import SlException
 from typing import Literal
 from utils.nolog import *
 
 SLD_DEF = os.path.join(os.path.dirname(sldef.__file__), 'sld.sldef')
+STDLIB = os.path.join(only(stdlib.__path__), 'io.sld') # XXX: std
+
+sld = sldef.load(SLD_DEF, Slang=slang)
 
 class ADTNode(ASTNode):
 	def optimize(self, ns, level):
@@ -88,7 +92,7 @@ class ADTBlockNode(ADTNode):
 	rbrace: '}'
 
 	def __str__(self):
-		return f" {self.lbrace}\n{S(';\n').join(self.definition or ()).indent()}{';'*bool(self.definition)}\n{self.rbrace}"
+		return f""" {self.lbrace}{f"\n{S(';\n').join(self.definition).indent()};\n" if (self.definition) else ''}{self.rbrace}"""
 
 	def analyze(self, ns):
 		for i in (self.definition or ()):
@@ -163,7 +167,7 @@ class ADTBinOpNode(ADTNode):
 	type_: ADTTypeNode
 
 	def __str__(self):
-		return f" {self.binop}{self.type_}"
+		return f"{self.binop}{' '*bool(str(self.binop)[-1].isalnum())}{self.type_}"
 
 	def analyze(self, ns):
 		self.binop.analyze(ns)
@@ -178,11 +182,11 @@ class ADTPostOpNode(ADTChoiceNode):
 class ADTOperatorNode(ADTNode):
 	typeref: ADTTyperefNode
 	preop: ADTPreOpNode | None
-	operator: 'operator'
+	_: '_'
 	postop: ADTPostOpNode | None
 
 	def __str__(self):
-		return f"{self.typeref} {self.preop or ''}{' '*bool(self.preop and str(self.preop)[-1].isalnum())}{self.operator}{self.postop or ''}"
+		return f"{self.typeref} {self.preop or ''}{' '*bool(self.preop and str(self.preop)[-1].isalnum())}{self._}{' '*bool(self.postop and str(self.postop)[-1].isalnum())}{self.postop or ''}"
 
 	def analyze(self, ns):
 		self.typeref.analyze(ns)
@@ -191,10 +195,10 @@ class ADTOperatorNode(ADTNode):
 
 		if (self.preop): ns.T.unop[self.preop.unop] = self.typeref
 		if (self.postop):
-			if (self.postop.binop): ns.T.binop[self.postop.binop.binop][self.postop.value.type_] = self.typeref
-			elif (self.postop.unpostop): ns.T.unop[self.postop.unpostop] = self.typeref
-			elif (self.postop.itemget): ns.T.itemget[self.postop.itemget.type_] = self.typeref
-			elif (self.postop.funccall): ns.T.call[tuple(self.postop.funccall.argdef)] = self.typeref
+			if (self.postop.binop): ns.T.binop[self.postop.binop.binop.value][ns.type(self.postop.value.type_)] = self.typeref
+			elif (self.postop.unpostop): ns.T.unop[self.postop.unpostop.value] = self.typeref
+			elif (self.postop.itemget): ns.T.itemget[ns.type(self.postop.itemget.type_)] = self.typeref
+			elif (self.postop.funccall): ns.T.call[tuple(self.postop.funccall.argdef or ())] = self.typeref
 			else: raise WTFException(self.postop)
 
 class ADTTyperefNode(ADTNode):
@@ -214,7 +218,7 @@ class ADTItemgetNode(ADTNode):
 	rbrk: ']'
 
 	def __str__(self):
-		return f" {self.lbrk}{self.type_}{self.rbrk}"
+		return f"{self.lbrk}{self.type_}{self.rbrk}"
 
 	def analyze(self, ns):
 		self.type_.analyze(ns)
@@ -265,6 +269,8 @@ class ADTMethoddefNode(ADTNode):
 		self.identifier.analyze(ns)
 		self.funccall.analyze(ns)
 
+		ns.T.methods[self.identifier.identifier.identifier][tuple(self.funccall.argdef or ())] = self.typeref
+
 class ADTFielddefNode(ADTNode):
 	typeref: ADTTyperefNode
 	identifier: list[ADTIdentifierNode]
@@ -278,7 +284,7 @@ class ADT(SlotsInit):
 	scope: str
 
 	def __repr__(self):
-		return f"<{self.__typename__} '{self.scope}': {self.code}>"
+		return f"<{self.__typename__} {self.scope!r}: {self.code}>"
 
 	def __str__(self):
 		return f"{self.code}"
@@ -303,6 +309,7 @@ class Typedef(Slots):
 	binop: lambda: Sdict(dict)
 	itemget: dict
 	call: dict
+	methods: lambda: Sdict(dict)
 
 	@dispatch
 	def __init__(self, name: str):
@@ -312,6 +319,9 @@ class Typedef(Slots):
 	def __init__(self, name: ADTIdentifierNode | ASTIdentifierNode):
 		self.__init__(name.identifier)
 
+	def __repr__(self):
+		return f"<Typedef for {self.name!r}>"
+
 class BuiltinTypedef(Typedef):
 	castable: set
 	iterable: ...
@@ -320,26 +330,40 @@ class BuiltinTypedef(Typedef):
 		return 'type'
 
 class DefNamespace(Namespace):
-	T: '# Typedef'
+	T: Typedef | None
 
 	def __init__(self, *args, T: Typedef = None, **kwargs):
 		super().__init__(*args, **kwargs)
 		self.T = T
 
 	@dispatch
+	def type(self, name: ADTTypeNode):
+		return self.type(name.identifier)
+
+	@dispatch
+	def type(self, name: ADTIdentifierNode):
+		return super().type(name.identifier)
+
+	@dispatch
 	def define(self, T: Typedef):
 		super().define(T.name, T)
+
+@cachedfunction
+def std_namespace():
+	with open(STDLIB, 'r') as f:
+		src = f.read()
+
+	st = Lexer().parse_string(sld, src)
+	adt = ADT.build(st, scope='<stdlib>')
+	return adt.analyze()
 
 @export
 def interpret_source(src, filename='<string>'):
 	try:
 		print(f"Source: {{\n{'\n'.join(f'\033[1;2;40m{ii:>6} \033[m{i}' for ii, i in enumerate(S(src).indent().split('\n'), 1))}\n}}\n")
 
-		slang = sldef.load()
-		sld = sldef.load(SLD_DEF, Slang=slang)
-
 		st = Lexer().parse_string(sld, src)
-		print("Source tree:", st, sep='\n\n', end='\n\n')
+		#print("Source tree:", st, sep='\n\n', end='\n\n')
 
 		adt = ADT.build(st, scope=filename.join('""'))
 		print(f"Abstract definition tree: {{\n{Sstr(adt).indent()}\n}}\n")
@@ -369,5 +393,5 @@ def main(cargs):
 
 if (__name__ == '__main__'): exit(main())
 
-# by Sdore, 2024
-# slang.sdore.me
+# by Sdore, 2024-25
+#  slang.sdore.me

@@ -22,7 +22,7 @@ type: identifier ('[' Slang.integer ']')?
 preop: Slang.unop
 binop: Slang.binop type
 postop: binop | Slang.unpostop | itemget | funccall
-operator: typeref (preop 'operator' | 'operator' postop)
+operator: typeref (preop '_' | '_' postop)
 
 typeref: (Slang.decimal '.')? type
 

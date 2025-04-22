@@ -189,7 +189,7 @@ class Instrs:
 	@dispatch
 	def load(self, x: ASTCallArgNode):
 		if (x.star): return f"table.unpack({self.load(x.expr)})"
-		else: return self.load(x.expr)
+		else: return self.load(x.expr, funccall=True, bind=True)
 
 	@dispatch
 	def load(self, x: ASTCallArgsNode):
@@ -200,11 +200,13 @@ class Instrs:
 		return f"({', '.join(map(self.load, (x.callargs or ())))})"
 
 	@dispatch
-	def load(self, x: ASTAttrgetNode, *, funccall=None):
+	def load(self, x: ASTAttrgetNode, *, funccall=None, bind=None):
 		op = x.attrop.attrselfop.op
 		if (op != '.'): raise NotImplementedError(x)
-		if (funccall and op == '.'): op = ':'
-		return f"{self.load(x.expr)}{op}{self.load(x.identifier)}"
+
+		if (op == '.' and funccall): op = ':'
+		r = f"{self.load(x.expr)}{op}{self.load(x.identifier)}"
+		return (f"function(...) return {r}(...) end" if (bind) else r)
 
 	@dispatch
 	def load(self, x: ASTClassAttrgetNode):
@@ -326,8 +328,8 @@ class Instrs:
 		return x.identifier
 
 	@dispatch
-	def load(self, x: ASTVarnameNode, *, funccall=None):
-		if (x.attrget): return self.load(x.attrget, funccall=funccall)
+	def load(self, x: ASTVarnameNode, *, funccall=None, bind=None):
+		if (x.attrget): return self.load(x.attrget, funccall=funccall, bind=bind)
 		else: return self.load(x.identifier)
 
 	@dispatch

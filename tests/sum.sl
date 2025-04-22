@@ -1,6 +1,6 @@
 #| Slang `sum' test. |#
 
-i64 a = 97
-i64 b = 5
-i64 c = a+b
+int a = 97
+int b = 5
+int c = a+b
 stdio.println(c)

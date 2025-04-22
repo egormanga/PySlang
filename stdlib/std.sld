@@ -28,37 +28,37 @@ class void {}
 class bool {
 	castable to int;
 
-	bool !operator;
+	bool !_;
 }
 
 class int {
 	castable to bool;
 	castable to float;
 
-	int +operator;
-	int -operator;
-	int ~operator;
-	int ++operator;
-	int --operator;
+	int +_;
+	int -_;
+	int ~_;
+	int ++_;
+	int --_;
 
-	int operator!;
-	int operator++;
-	int operator--;
-	int operator**;
+	int _!;
+	int _++;
+	int _--;
+	int _**;
 
-	int operator +int;
-	int operator -int;
-	int operator *int;
-	int operator //int;
-	int operator %int;
-	int operator **int;
-	int operator <<int;
-	int operator >>int;
-	int operator &int;
-	int operator |int;
-	int operator ^int;
+	int _ +int;
+	int _ -int;
+	int _ *int;
+	int _ //int;
+	int _ %int;
+	int _ **int;
+	int _ <<int;
+	int _ >>int;
+	int _ &int;
+	int _ |int;
+	int _ ^int;
 
-	range operator to int;
+	range _ to int;
 
 	int popcount();
 
@@ -68,17 +68,17 @@ class int {
 }
 
 class float {
-	float +operator;
-	float -operator;
-	bool !operator;
+	float +_;
+	float -_;
+	bool !_;
 
-	float operator +float;
-	float operator -float;
-	float operator *float;
-	float operator /float;
-	int operator //float;
-	float operator %float;
-	float operator **float;
+	float _ +float;
+	float _ -float;
+	float _ *float;
+	float _ /float;
+	int _ //float;
+	float _ %float;
+	float _ **float;
 
 	int round();
 	int round(int prec);
@@ -89,26 +89,26 @@ class float {
 class char {
 	castable to str;
 
-	bool !operator;
+	bool !_;
 
-	char operator +char;
-	char operator +int;
-	char operator -char;
-	char operator -int;
-	char operator *int;
+	char _ +char;
+	char _ +int;
+	char _ -char;
+	char _ -int;
+	char _ *int;
 
-	range operator to char;
+	range _ to char;
 }
 
 class str {
-	bool !operator;
+	bool !_;
 
 	iterable char;
 
-	char operator [int];
+	char _[int];
 
-	str operator +str;
-	str operator *int;
+	str _ +str;
+	str _ *int;
 
 	int length();
 
@@ -120,7 +120,7 @@ class range {
 
 	iterable type;
 
-	type operator [int];
+	type _[int];
 }
 
 class tuple {
@@ -128,9 +128,9 @@ class tuple {
 
 	iterable types;
 
-	bool !operator;
+	bool !_;
 
-	types[0] operator [int];
+	types[0] _[int];
 }
 
 class list {
@@ -138,12 +138,12 @@ class list {
 
 	iterable type;
 
-	bool !operator;
+	bool !_;
 
-	list operator +list;
-	list operator *int;
+	list _ +list;
+	list _ *int;
 
-	type operator [int];
+	type _[int];
 
 	void append(type item);
 
@@ -156,14 +156,14 @@ class list {
 
 	void sort();
 
-	0.rettype each(function);
+	0.rettype each(func);
 }
 
-class function {
+class func {
 	typename argtypes[];
 	typename rettype;
 
-	rettype operator (*argtypes);
+	rettype _(*argtypes);
 
 	rettype map(iterable);
 }

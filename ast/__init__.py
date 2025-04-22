@@ -3,13 +3,13 @@
 
 from __future__ import annotations
 
-from .. import sldef
+from .. import sldef, stdlib
 from ..exceptions import SlValidationError
-from ..lexer import Expr, Token
+from ..lexer import Expr, Lexer, Token
 from typing import Literal
 from utils.nolog import *
 
-sldef = sldef.load()
+slang = sldef.load()
 
 class ASTNodeMeta(ABCSlotsInitMeta):
 	class OptimizerMeta(SlotsTypecheckMeta):
@@ -57,10 +57,10 @@ class ASTNode(metaclass=ASTNodeMeta):
 		return self.__class__.__name__.removeprefix('AST').removesuffix('Node')
 
 	@abc.abstractmethod
-	def analyze(self, ns: Namespace) -> None:
+	def analyze(self, ns: CodeNamespace) -> None:
 		pass
 
-	def validate(self, ns: Namespace) -> None:
+	def validate(self, ns: CodeNamespace) -> None:
 		for i in self.__annotations__:
 			try: v = getattr(self, i)
 			except AttributeError: continue
@@ -71,7 +71,7 @@ class ASTNode(metaclass=ASTNodeMeta):
 					else: j.validate(ns)
 
 	@abc.abstractmethod
-	def optimize(self, ns: Namespace, level: int = 0) -> ASTNode | None:
+	def optimize(self, ns: CodeNamespace, level: int = 0) -> ASTNode | None:
 		cls = self.__class__
 
 		for i in (cls.optimizers + cls.__subclasses__()):
@@ -215,7 +215,7 @@ class ASTChoiceNode(ASTNode):
 	def analyze(self, ns):
 		self.value.analyze(ns)
 
-	def validate(self, ns: Namespace) -> None:
+	def validate(self, ns) -> None:
 		v = self.value
 		for i in (v if (isiterablenostr(v)) else (v,)):
 			try: i.validate
@@ -325,6 +325,7 @@ class ASTBlockNode(ASTNode):
 			i.analyze(ns)
 
 	def validate(self, ns):
+		super().validate(ns)
 		if (unused := ns.unused()): raise SlValidationError.from_node(self, "Unused variables", unused)
 
 	def optimize(self, ns, level=0):
@@ -356,6 +357,7 @@ class ASTClassBlockNode(ASTNode):
 			i.analyze(ns)
 
 	def validate(self, ns):
+		super().validate(ns)
 		if (unused := ns.unused()): raise SlValidationError.from_node(self, "Unused variables", unused)
 
 	def optimize(self, ns, level=0):
@@ -398,6 +400,13 @@ class ASTBinOpExprNode(ASTNode):
 	def analyze(self, ns):
 		self.lhs.analyze(ns)
 		self.rhs.analyze(ns)
+
+	def validate(self, ns):
+		super().validate(ns)
+
+		lt, rt = map(ns.type, self.expr)
+		if (lt not in rt.binop[self.binop.value] and
+		    rt not in lt.binop[self.binop.value]): raise SlValidationError.from_node(self, "Incompatible operands", lt.name, self.binop, rt.name)
 
 	def optimize(self, ns, level=0):
 		self.lhs = self.lhs.optimize(ns, level)
@@ -577,7 +586,7 @@ class ASTExprNode(ASTNode):
 ## Non-final
 
 class ASTTypeNode(ASTNode):
-	modifier: list[Literal[sldef.definitions.modifier.format.literals]] | None
+	modifier: list[Literal[slang.definitions.modifier.format.literals]] | None
 	identifier: ASTIdentifierNode
 
 	def __str__(self):
@@ -819,6 +828,10 @@ class ASTFunccallArgsNode(ASTNode):
 
 		return super().optimize(ns, level)
 
+	@property
+	def nargs(self) -> int:
+		return (len(self.callargs or ()) + len(self.callkwargs or ()))
+
 class ASTAttrSelfOpNode(ASTSimpleNode):
 	op: Literal['@.', '@', '.', ':']
 
@@ -840,6 +853,11 @@ class ASTAttrgetNode(ASTNode):
 	def analyze(self, ns):
 		self.expr.analyze(ns)
 		self.identifier.analyze(ns)
+
+	def validate(self, ns):
+		self.expr.validate(ns)
+		self.attrop.validate(ns)
+		if (str(self.identifier) not in ns.type(self.expr).methods): raise SlValidationError.from_node(self, "Undefined attribute", self.identifier)
 
 	def optimize(self, ns, level):
 		self.expr = self.expr.optimize(ns, level)
@@ -1416,11 +1434,24 @@ class ASTImportNode(ASTNode):
 	star: Literal['*'] | None
 
 	def __str__(self):
-		return f"""{self.import_} {str().join(self.import__)}{self.package}{self.colon*bool(self.names or self.star)}{f" {S(', ').join(self.names)}" if (self.names) else ''}{self.star or ''}"""
+		return f"""{self.import_} {self.namespace or ''}{self.path}{self.package}{self.colon*bool(self.names or self.star)}{f" {S(', ').join(self.names)}" if (self.names) else ''}{self.star or ''}"""
 
 	def analyze(self, ns):
 		for i in self.identifier:
 			i.analyze(ns)
+
+		namespace = (self.namespace or '').removesuffix(':')
+		match namespace:
+			#case None | 'sl': # TODO
+			case 'sld':
+				with open((filename := os.path.join((self.path or only(stdlib.__path__)), f"{self.package}.{namespace}")), 'r') as f:
+					src = f.read()
+
+				from .adt import ADT, sld
+				st = Lexer().parse_string(sld, src)
+				adt = ADT.build(st, scope=filename.join('""'))
+				ns |= adt.analyze()
+			case _: raise WTFException(ns)
 
 	def optimize(self, ns, level):
 		self.identifier = self.identifier.optimize(ns, level)
@@ -1428,6 +1459,14 @@ class ASTImportNode(ASTNode):
 		cls, self = self.__class__, super().optimize(ns, level)
 		if (isinstance(self, cls) and not self.identifier): return None
 		else: return self
+
+	@property
+	def namespace(self):
+		return only((i for i in self.import__ if i.endswith(':')), default=None)
+
+	@property
+	def path(self):
+		return str().join(i for i in self.import__ if i.endswith('/'))
 
 	@property
 	def package(self):
@@ -1467,13 +1506,13 @@ class ASTClassDefkeywordNode(ASTSimpleNode):
 		return f"{self.classdefkeyword}"
 
 class ASTReservedNode(ASTSimpleNode):
-	reserved: Literal[sldef.definitions.reserved.format.literals]
+	reserved: Literal[slang.definitions.reserved.format.literals]
 
 	def __str__(self):
 		return f"{self.reserved}"
 
 	def validate(self, ns):
-		raise SlValidationError("Reserved keyword", self.reserved)
+		raise SlValidationError.from_node(self, "Reserved keyword", self.reserved)
 
 
 ## Identifiers
@@ -1488,6 +1527,10 @@ class ASTIdentifierNode(ASTSimpleNode):
 
 	def __eq__(self, other):
 		return (isinstance(other, self.__class__) and self.identifier == other.identifier)
+
+	def validate(self, ns):
+		if (self.identifier not in ns.types): raise SlValidationError.from_node(self, "Undefined name", self.identifier)
+		#if (self.identifier not in ns.values): raise SlValidationError.from_node(self, "Uninitialized variable", self.identifier)
 
 	@classmethod
 	@cachedfunction
@@ -1529,6 +1572,20 @@ class ASTListNode(ASTNode):
 	def __str__(self):
 		return f"""{self.lbrk}{self.type_}{f"{self.colon} {S(', ').join(self.expr)}" if (self.expr) else ''}{self.rbrk}"""
 
+	def analyze(self, ns):
+		self.type_.analyze(ns)
+
+		for i in (self.expr or ()):
+			i.analyze(ns)
+
+	def optimize(self, ns, level=0):
+		self.type_ = self.type_.optimize(ns, level)
+		self.expr = list(filter(None, (i.optimize(ns, level) for i in self.expr)))
+
+		cls, self = self.__class__, super().optimize(ns, level)
+		if (isinstance(self, cls) and not self.type_ and not self.expr): return None
+		else: return self
+
 class ASTLiteralNode(ASTChoiceNode):
 	boolean: Literal['true', 'false'] | None
 	number: int | float | complex | str | None
@@ -1560,7 +1617,7 @@ class ASTLiteralNode(ASTChoiceNode):
 class ASTUnOpNode(ASTSimpleNode, ASTChoiceNode):
 	unchop: str | None
 	undchop: str | None
-	unkwop: Literal[sldef.definitions.unkwop.format.literals] | None
+	unkwop: Literal[slang.definitions.unkwop.format.literals] | None
 	unmathop: str | None
 
 class ASTUnPostOpNode(ASTSimpleNode, ASTChoiceNode):
@@ -1570,7 +1627,7 @@ class ASTUnPostOpNode(ASTSimpleNode, ASTChoiceNode):
 class ASTBinOpNode(ASTSimpleNode, ASTChoiceNode):
 	binchop: str | None
 	bindchop: str | None
-	binkwop: Literal[sldef.definitions.binkwop.format.literals] | None
+	binkwop: Literal[slang.definitions.binkwop.format.literals] | None
 	binmathop: str | None
 
 
@@ -1603,23 +1660,111 @@ class ASTCommentNode(ASTSimpleNode, ASTChoiceNode):
 class Namespace(Slots):
 	parent: ...
 	types: dict
-	values: dict
-	refcnt: dict
 
 	def __init__(self, parent=None):
 		self.parent = parent
 
 	def __repr__(self):
-		return '\n\t '.join(f"<{self.refcnt.get(i, '?')}> {self.types.get(i, '*')} {i}{f' = {v}' if (v := self.values.get(i)) else ''}" for i in S((*self.types, *self.values, *self.refcnt)).uniquize()).join('{}')
+		return '\n\t '.join(map(self.__repr_item__, self.names)).join('{}')
 
-	def __contains__(self, x):
-		try: self.value(x)
-		except KeyError: return False
-		else: return True
+	def __repr_item__(self, x):
+		return f"{self.types.get(x, '*')} {x}"
+
+	def __ior__(self, x: Namespace):
+		self.types |= x.types
+		return self
 
 	@cachedfunction
 	def derive(self, node: ASTNode, index: int = 0, /):
 		return self.__class__(parent=self)
+
+	@dispatch
+	def type(self, name: ASTExprNode):
+		return self.type(name.expr or name.value)
+
+	@dispatch
+	def type(self, name: ASTValueNode | ASTVarnameNode):
+		return self.type(name.value)
+
+	@dispatch
+	def type(self, name: ASTIdentifierNode | ASTTypeNode):
+		return self.type(name.identifier)
+
+	@dispatch
+	def type(self, name: str):
+		try: return self.types[name]
+		except KeyError:
+			try: return self.parent.type(name)
+			except (AttributeError, KeyError): pass
+			raise
+
+	@dispatch
+	def type(self, x: ASTBinOpExprNode):
+		lt, rt = map(self.type, x.expr)
+		return (lt.binop[x.binop.value].get(rt) or
+		        rt.binop[x.binop.value].get(lt) or
+		        raise_(KeyError(x)))
+
+	@dispatch
+	def type(self, x: ASTLiteralNode):
+		if (x.boolean is not None): return self.type('bool')
+		elif (x.number is not None):
+			match type(x.number):
+				case builtins.int: return self.type('int')
+				case builtins.float: return self.type('float')
+				case builtins.complex: return self.type('complex')
+				case _: raise WTFException(_)
+		elif (x.character is not None): return self.type('char')
+		elif (x.string is not None): return self.type('str')
+		elif (x.tuple is not None): return self.type('tuple')
+		elif (x.list is not None): return self.type('list')
+		else: raise WTFException(x)
+
+	@dispatch
+	def type(self, x: lambda x: isinstance(x, Typedef)):
+		return x
+
+	@dispatch
+	def define(self, name: ASTVarnameNode, type_: ASTTypeNode, **kwargs):
+		self.define(name.value, type_, **kwargs)
+
+	@dispatch
+	def define(self, name: ASTIdentifierNode, type_: ASTTypeNode, **kwargs):
+		self.define(name.identifier, type_, **kwargs)
+
+	@dispatch
+	def define(self, name: str, type_):
+		type_ = self.type(type_)
+		if ((t := self.types.get(name, type_)) != type_): raise ValueError(name, "redefined", t, type_)
+		self.types[name] = type_
+
+	@dispatch
+	def rename(self, old: str, new: str):
+		try: self.types[new] = self.types.pop(old)
+		except KeyError: pass
+
+	@dispatch
+	def delete(self, name: ASTVarnameNode):
+		self.delete(name.value)
+
+	@dispatch
+	def delete(self, name: ASTIdentifierNode):
+		self.delete(name.identifier)
+
+	@dispatch
+	def delete(self, name: str):
+		del self.types[name]
+
+	@property
+	def names(self):
+		return Stuple(self.types).uniquize()
+
+class CodeNamespace(Namespace):
+	values: dict
+	refcnt: dict
+
+	def __repr_item__(self, x):
+		return f"<{self.refcnt.get(x, '?')}> {super().__repr_item__(x)}{f' = {v}' if (v := self.values.get(x)) else ''}"
 
 	@dispatch
 	def value(self, name: ASTValueNode | ASTVarnameNode):
@@ -1638,25 +1783,14 @@ class Namespace(Slots):
 		return value.value
 
 	@dispatch
-	def __define(self, name: ASTVarnameNode, type_: ASTTypeNode, value=None):
-		self.__define(name.value, type_, value=value)
-
-	@dispatch
-	def __define(self, name: ASTIdentifierNode, type_: ASTTypeNode, value=None):
-		self.__define(name.identifier, type_, value=value)
-
-	@dispatch
-	def __define(self, name: str, type_, value):
-		self.__define(name, type_)
+	def define(self, name: str, type_, value):
+		self.define(name, type_)
 		self.values[name] = value
 
 	@dispatch
-	def __define(self, name: str, type_):
-		if ((t := self.types.get(name, type_)) != type_): raise ValueError(name, "redefined", t, type_)
-		self.types[name] = type_
+	def define(self, name: str, type_):
+		super().define(name, type_)
 		self.refcnt[name] = 0
-
-	define = __define
 
 	@dispatch
 	def assign(self, name: ASTVarnameNode, value):
@@ -1678,24 +1812,15 @@ class Namespace(Slots):
 
 	@dispatch
 	def rename(self, old: str, new: str):
-		try: self.types[new] = self.types.pop(old)
-		except KeyError: pass
+		super().rename(old, new)
 		try: self.values[new] = self.values.pop(old)
 		except KeyError: pass
 		try: self.refcnt[new] = self.refcnt.pop(old)
 		except KeyError: pass
 
 	@dispatch
-	def delete(self, name: ASTVarnameNode):
-		self.delete(name.value)
-
-	@dispatch
-	def delete(self, name: ASTIdentifierNode):
-		self.delete(name.identifier)
-
-	@dispatch
 	def delete(self, name: str):
-		del self.types[name]
+		super().delete(name)
 		del self.values[name]
 		del self.refcnt[name]
 
@@ -1743,20 +1868,25 @@ class Namespace(Slots):
 			else: raise
 
 	def unused(self) -> set[str]:
-		return {i for i in self.types if not self.refcnt.get(i)}
+		return {i for i in self.names if not self.refcnt.get(i) and not isinstance(self.types.get(i), BuiltinTypedef)}
+
+	@property
+	def names(self):
+		return S((*self.types, *self.values, *self.refcnt)).uniquize()
 
 class AST(SlotsInit):
 	code: ASTCodeNode
 	scope: str
 
 	def __repr__(self):
-		return f"<{self.__typename__} '{self.scope}': {self.code}>"
+		return f"<{self.__typename__} {self.scope!r}: {self.code}>"
 
 	def __str__(self):
 		return f"{self.code}"
 
 	def analyze(self) -> Namespace:
-		ns = Namespace()
+		ns = CodeNamespace()
+		ns |= std_namespace()
 		self.code.analyze(ns)
 		return ns
 
@@ -1775,6 +1905,7 @@ class AST(SlotsInit):
 		return cls(code=code, scope=scope)
 
 from . import optimizers
+from .adt import BuiltinTypedef, Typedef, std_namespace
 
-# by Sdore, 2021-24
+# by Sdore, 2021-25
 #  slang.sdore.me
