@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<language id="sld" name="Slang definitions" version="2.0" _section="Source">
+	<metadata>
+		<property name="mimetypes">text/x-sldef;application/x-sldef</property>
+		<property name="globs">*.sld</property>
+		<property name="line-comment-start">#</property>
+		<property name="block-comment-start">#|</property>
+		<property name="block-comment-start">|#</property>
+	</metadata>
+
+	<styles>
+		<style id="comment"      name="Comment"         map-to="def:comment"/>
+		<style id="keyword"      name="Keyword"         map-to="def:keyword"/>
+		<style id="special"      name="Special"         map-to="def:special-constant"/>
+		<style id="operator"     name="Operator"        map-to="def:operator"/>
+		<style id="decimal"      name="Decimal number"  map-to="def:decimal"/>
+		<style id="type-name"    name="Type Name"       map-to="def:type"/>
+		<style id="class-name"   name="Class Name"      map-to="def:function"/>
+		<style id="method-name"  name="Method Name"     map-to="def:function"/>
+	</styles>
+
+	<definitions>
+		<define-regex id="identifier">[^\W\d][\w]*</define-regex>
+		<define-regex id="number">[^\D0]\d*</define-regex>
+		<define-regex id="op">[^\d;]+</define-regex>
+		<define-regex id="index">\$\%{number}</define-regex>
+		<define-regex id="typename" extended="true">\%{identifier} (?:\s* \[ \s* \%{index} \s* \])?</define-regex>
+		<define-regex id="typespec" extended="true">\%{identifier} \s+ of \b</define-regex>
+		<define-regex id="type" extended="true">(?:\%{typespec} \s+)? (?:\%{identifier} \s+ of \s+)? \%{typename}</define-regex>
+		<define-regex id="typeref" extended="true">(?:\%{typespec} \s+)? (?:\%{index} \s* \. \s*)? \%{typename}</define-regex>
+
+		<context id="class-definition">
+			<match extended="true">
+				(class) \s+
+				(\%{identifier})
+			</match>
+			<include>
+				<context sub-pattern="1" style-ref="keyword"/>
+				<context sub-pattern="2" style-ref="class-name"/>
+			</include>
+		</context>
+
+		<context id="method-definition">
+			<match extended="true">
+				(\%{typeref}) \s+
+				(?:_ | (\%{identifier})) \s*\b
+				(\() .*?
+				(\))
+			</match>
+			<include>
+				<context sub-pattern="1" style-ref="type-name"/>
+				<context sub-pattern="2" style-ref="method-name"/>
+				<context sub-pattern="3" style-ref="operator"/>
+				<context sub-pattern="4" style-ref="operator"/>
+			</include>
+		</context>
+
+		<context id="unpreop">
+			<match extended="true">
+				(\%{type}) \s+
+				(\%{op}) \s*\b _
+			</match>
+			<include>
+				<context sub-pattern="1" style-ref="type-name"/>
+				<context sub-pattern="2" style-ref="operator"/>
+			</include>
+		</context>
+
+		<context id="unpostop">
+			<match extended="true">
+				(\%{type}) \s+ _ \s*\b
+				(\%{op})
+			</match>
+			<include>
+				<context sub-pattern="1" style-ref="type-name"/>
+				<context sub-pattern="2" style-ref="operator"/>
+			</include>
+		</context>
+
+		<context id="binop">
+			<match extended="true">
+				(\%{typeref}) \s+ _ \s*\b
+				(\%{op}) \s*\b
+				(\%{type}) \s*\b
+				(\%{op})?
+			</match>
+			<include>
+				<context sub-pattern="1" style-ref="type-name"/>
+				<context sub-pattern="2" style-ref="operator"/>
+				<context sub-pattern="3" style-ref="type-name"/>
+				<context sub-pattern="4" style-ref="operator"/>
+			</include>
+		</context>
+
+		<context id="castable">
+			<match extended="true">
+				(castable) \s+
+				(to) \s+
+				(\%{type})
+			</match>
+			<include>
+				<context sub-pattern="1" style-ref="operator"/>
+				<context sub-pattern="2" style-ref="operator"/>
+				<context sub-pattern="3" style-ref="type-name"/>
+			</include>
+		</context>
+
+		<context id="iterable">
+			<match extended="true">
+				(iterable) \s+
+				(\%{type})
+			</match>
+			<include>
+				<context sub-pattern="1" style-ref="operator"/>
+				<context sub-pattern="2" style-ref="type-name"/>
+			</include>
+		</context>
+
+		<context id="operator">
+			<include>
+				<context ref="binop"/>
+				<context ref="unpreop"/>
+				<context ref="unpostop"/>
+				<context ref="castable"/>
+				<context ref="iterable"/>
+			</include>
+		</context>
+
+		<context id="special" style-ref="special">
+			<keyword>typename</keyword>
+			<keyword>of</keyword>
+		</context>
+
+		<context id="keyword" style-ref="keyword">
+			<keyword>import</keyword>
+			<keyword>class</keyword>
+
+			<keyword>init</keyword>
+			<keyword>constr</keyword>
+			<keyword>repr</keyword>
+			<keyword>eq</keyword>
+
+			<keyword>const</keyword>
+			<keyword>static</keyword>
+			<keyword>volatile</keyword>
+			<keyword>property</keyword>
+		</context>
+
+		<context id="sld" class="no-spell-check">
+			<include>
+				<context ref="def:shebang"/>
+				<context ref="slang:close-comment-outside-comment"/>
+				<context ref="slang:multiline-comment"/>
+				<context ref="slang:comment"/>
+				<context ref="def:decimal"/>
+				<context ref="def:float"/>
+				<context ref="class-definition"/>
+				<context ref="method-definition"/>
+				<context ref="operator"/>
+				<context ref="special"/>
+				<context ref="keyword"/>
+				<context ref="slang:reserved-keyword"/>
+			</include>
+		</context>
+	</definitions>
+</language>
+
+<!-- by Sdore, 2025
+     slang.sdore.me -->

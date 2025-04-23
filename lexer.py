@@ -52,12 +52,12 @@ class Expr(Token):
 
 	@property
 	def token(self):
-		assert (len(self.tokens) == 1)
+		if (len(self.tokens) != 1): raise SlNotAtomicError.from_node(self, "Not an atomic token")
 		return self.tokens[0].token
 
 	@property
 	def typename(self):
-		assert (len(self.tokens) == 1)
+		if (len(self.tokens) != 1): raise SlNotAtomicError.from_node(self, "Not an atomic token")
 		return self.tokens[0].typename
 
 	@property
@@ -237,7 +237,8 @@ class Lexer:
 	def parse_string(self, sldef: SlDef, src: str, name: str = '<string>', *, lnooff: int = 0, offset: int = 0):
 		lineno = (lnooff + 1)
 		token = sldef.definitions.code.format
-		tl = self.parse_token(token, sldef, src.rstrip('\n')+'\n', lineno=lineno, offset=offset, usage=token.name, was=frozenset(), _full=True)
+		with source_context(src):
+			tl = self.parse_token(token, sldef, src.rstrip('\n')+'\n', lineno=lineno, offset=offset, usage=token.name, was=frozenset(), _full=True)
 
 		#if (nlcnt := sum(i.nlcnt for i in tl)): length = (sum((l[-1].offset + l[-1].length) for k, v in itertools.groupby(tl, key=operator.attrgetter('lineno')) if (l := tuple(v))) - tl[0].offset)
 		#else:
@@ -246,5 +247,5 @@ class Lexer:
 		#if ((leftover := src[length:]) and not leftover.isspace()): raise SlSyntaxExpectedNothingError(tok(leftover), lineno=(lineno + nlcnt), offset=(tl[-1].offset + tl[-1].length if (tl[-1].lineno == lineno + nlcnt) else 0), length=toklen(leftover))
 		return Expr(tl, name=name, lineno=lineno, offset=offset, length=length)
 
-# by Sdore, 2021-24
+# by Sdore, 2021-25
 #  slang.sdore.me

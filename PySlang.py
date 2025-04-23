@@ -3,15 +3,16 @@
 
 from . import sldef
 from .ast import AST
-from .exceptions import *
+from .compilers import Compiler
+from .exceptions import SlException, source_context
 from .lexer import Lexer
 from utils import *
 
 @export
 def compile_source(src, filename='<string>', *, compiler, optimize=0):
-	try:
-		print(f"Source: {{\n{'\n'.join(f'\033[1;2;40m{ii:>6} \033[m{i}' for ii, i in enumerate(S(src).indent().split('\n'), 1))}\n}}\n")
+	print(f"Source: {{\n{'\n'.join(f'\033[1;2;40m{ii:>6} \033[m{i}' for ii, i in enumerate(S(src).indent().split('\n'), 1))}\n}}\n")
 
+	with source_context(src, filename):
 		st = Lexer().parse_string(sldef.load(), src)
 		#print("Source tree:", st, sep='\n\n', end='\n\n')
 
@@ -28,11 +29,7 @@ def compile_source(src, filename='<string>', *, compiler, optimize=0):
 
 		code = compiler.compile_ast(ast, ns, filename=filename)
 
-		print("Compiled.\n")
-	except SlException as ex:
-		if (not ex.srclines): ex.srclines = src.split('\n')
-		raise
-
+	print("Compiled.\n")
 	return code
 
 @apmain
@@ -47,7 +44,8 @@ def main(cargs):
 		argparser.add_argument('-o', dest='output', required=True)
 		cargs = argparser.parse_args()
 
-	compiler = importlib.import_module(f".compilers.{cargs.compiler}", package=__package__).compiler
+	m = importlib.import_module(f".compilers.{cargs.compiler}", package=__package__)
+	compiler = only(v for k, v in vars(m).items() if k in m.__all__ and isinstance(v, type) and issubclass(v, Compiler))
 
 	with cargs.file as f:
 		src = f.read()

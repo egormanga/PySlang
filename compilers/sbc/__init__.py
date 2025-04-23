@@ -131,7 +131,7 @@ class Instrs:
 
 	@dispatch
 	def add(self, x: ASTCodeNode):
-		for i in x.statement or ():
+		for i in (x.statement or ()):
 			self.add(i)
 
 	@dispatch
@@ -154,12 +154,7 @@ class Instrs:
 
 	@dispatch
 	def load(self, x: ASTValueNode, **kwargs):
-		found = bool()
-		for i in x.__slots__:
-			if (v := getattr(x, i, None)):
-				assert (not found)
-				self.load(v, **kwargs)
-				found = True
+		self.load(x.value, **kwargs)
 
 	@dispatch
 	def load(self, x: ASTExprNode, **kwargs):
@@ -167,6 +162,11 @@ class Instrs:
 
 
 	## Non-final
+
+	@dispatch
+	def add(self, x: ASTVardefAssignmentNode, *, type_):
+		self.load(x.expr, type_=type_)
+		self.store(x.identifier)
 
 	@dispatch
 	def load(self, x: ASTCallArgNode, **kwargs):
@@ -201,18 +201,14 @@ class Instrs:
 
 	@dispatch
 	def add(self, x: ASTStatementNode):
-		found = bool()
-		for i in x.__slots__:
-			if (v := getattr(x, i, None)):
-				assert (not found)
-				self.add(v)
-				found = True
+		self.add(x.value)
 
 	@dispatch
 	def add(self, x: ASTVardefNode):
+		type_ = self.ns.type(x.type_)
+
 		for i in x.vardefassignment:
-			self.load(i.expr, type_=x.type_) #sig=Signature.build(x.type_, ns=self.ns))
-			self.store(i.identifier)
+			self.add(i, type_=type_)
 
 	@dispatch
 	def add(self, x: ASTFunccallNode):
@@ -260,12 +256,7 @@ class Instrs:
 
 	@dispatch
 	def load(self, x: ASTVarnameNode, **kwargs):
-		found = bool()
-		for i in x.__slots__:
-			if (v := getattr(x, i, None)):
-				assert (not found)
-				self.load(v)
-				found = True
+		self.load(x.value)
 
 
 	## Literals
@@ -306,6 +297,7 @@ class Instrs:
 	@dispatch
 	def add(self, x: ASTBinOpNode):
 		self.builtin(self.binopmap[x.binchop], nargs=2)
+
 
 	## Comments
 
@@ -350,7 +342,7 @@ class Instrs:
 	#	self.add(x.code)
 	#	self.add(end)
 
-
+@export
 class SBCCompiler(Compiler):
 	ext = '.sbc'
 
@@ -360,8 +352,6 @@ class SBCCompiler(Compiler):
 		instrs.add(ast.code)
 		code = instrs.compile()
 		return code
-
-compiler = SBCCompiler
 
 # by Sdore, 2022-25
 #  slang.sdore.me

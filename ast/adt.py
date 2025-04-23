@@ -18,7 +18,7 @@ from . import (
 )
 from .. import sldef, stdlib
 from ..lexer import Lexer
-from ..exceptions import SlException
+from ..exceptions import SlException, source_context
 from typing import Literal
 from utils.nolog import *
 
@@ -28,6 +28,10 @@ STDLIB = os.path.join(only(stdlib.__path__), 'io.sld') # XXX: std
 sld = sldef.load(SLD_DEF, Slang=slang)
 
 class ADTNode(ASTNode):
+	@classproperty
+	def __typename__(cls):
+		return cls.__name__.removeprefix('ADT').removesuffix('Node')
+
 	def optimize(self, ns, level):
 		pass
 
@@ -67,7 +71,7 @@ class ADTClassdefNode(ADTNode):
 		for i in self.identifier:
 			i.analyze(ns)
 
-		t = BuiltinTypedef(self.classname)
+		t = BuiltinTypedef(*self.identifier)
 		ns.define(t)
 
 		blockns = ns.derive(self)
@@ -78,11 +82,22 @@ class ADTClassdefNode(ADTNode):
 	def classname(self):
 		return self.identifier[0]
 
+	@property
+	def parents(self):
+		return self.identifier[1:]
+
 class ADTIdentifierNode(ADTSimpleNode):
 	identifier: ASTIdentifierNode
 
 	def __str__(self):
 		return f"{self.identifier}"
+
+class ADTIndexNode(ADTSimpleNode):
+	dollar: '$'
+	decimal: int
+
+	def __str__(self):
+		return f"{self.dollar}{self.decimal}"
 
 class ADTBlockNode(ADTNode):
 	lbrace: '{'
@@ -110,14 +125,16 @@ class ADTTypenameNode(ADTNode):
 	typename: 'typename'
 	identifier: ADTIdentifierNode
 	lbrk: Literal['['] | None
-	integer: int | None
+	index: ADTIndexNode | None
 	rbrk: Literal[']'] | None
 
 	def __str__(self):
-		return f"{self.typename} {self.identifier}{self.lbrk or ''}{self.integer if (self.integer is not None) else ''}{self.rbrk or ''}"
+		return f"{self.typename} {self.identifier}{self.lbrk or ''}{self.index or ''}{self.rbrk or ''}"
 
 	def analyze(self, ns):
 		self.identifier.analyze(ns)
+
+		ns.define(self)
 
 class ADTCastableNode(ADTNode):
 	castable: 'castable'
@@ -147,11 +164,11 @@ class ADTIterableNode(ADTNode):
 class ADTTypeNode(ADTNode):
 	identifier: ADTIdentifierNode
 	lbrk: Literal['['] | None
-	integer: int | None
+	index: ADTIndexNode | None
 	rbrk: Literal[']'] | None
 
 	def __str__(self):
-		return f"{self.identifier}{self.lbrk or ''}{self.integer if (self.integer is not None) else ''}{self.rbrk or ''}"
+		return f"{self.identifier}{self.lbrk or ''}{self.index or ''}{self.rbrk or ''}"
 
 	def analyze(self, ns):
 		self.identifier.analyze(ns)
@@ -193,21 +210,24 @@ class ADTOperatorNode(ADTNode):
 		if (self.preop): self.preop.analyze(ns)
 		if (self.postop): self.postop.analyze(ns)
 
-		if (self.preop): ns.T.unop[self.preop.unop] = self.typeref
+		type_ = ns.type(self.typeref)
+		if (self.preop): ns.T.unop[self.preop.unop] = type_
 		if (self.postop):
-			if (self.postop.binop): ns.T.binop[self.postop.binop.binop.value][ns.type(self.postop.value.type_)] = self.typeref
-			elif (self.postop.unpostop): ns.T.unop[self.postop.unpostop.value] = self.typeref
-			elif (self.postop.itemget): ns.T.itemget[ns.type(self.postop.itemget.type_)] = self.typeref
-			elif (self.postop.funccall): ns.T.call[tuple(self.postop.funccall.argdef or ())] = self.typeref
+			if (self.postop.binop): ns.T.binop[self.postop.binop.binop.value][ns.type(self.postop.value.type_)] = type_
+			elif (self.postop.unpostop): ns.T.unop[self.postop.unpostop.value] = type_
+			elif (self.postop.itemget): ns.T.itemget[ns.type(self.postop.itemget.type_)] = type_
+			elif (self.postop.funccall): ns.T.call[tuple(self.postop.funccall.argdef or ())] = type_
 			else: raise WTFException(self.postop)
 
 class ADTTyperefNode(ADTNode):
-	decimal: int | None
+	identifier: ADTIdentifierNode | None
+	of: Literal['of'] | None
+	index: ADTIndexNode | None
 	dot: Literal['.'] | None
 	type_: ADTTypeNode
 
 	def __str__(self):
-		return f"{self.decimal if (self.decimal is not None) else ''}{self.dot or ''}{self.type_}"
+		return f"{self.identifier or ''}{f' {self.of} ' if (self.of) else ''}{self.index or ''}{self.dot or ''}{self.type_}"
 
 	def analyze(self, ns):
 		self.type_.analyze(ns)
@@ -269,7 +289,7 @@ class ADTMethoddefNode(ADTNode):
 		self.identifier.analyze(ns)
 		self.funccall.analyze(ns)
 
-		ns.T.methods[self.identifier.identifier.identifier][tuple(self.funccall.argdef or ())] = self.typeref
+		ns.T.methods[self.identifier.identifier.identifier][tuple(self.funccall.argdef or ())] = ns.type(self.typeref)
 
 class ADTFielddefNode(ADTNode):
 	typeref: ADTTyperefNode
@@ -305,6 +325,7 @@ class ADT(SlotsInit):
 
 class Typedef(Slots):
 	name: str
+	parents: tuple[str]
 	unop: dict
 	binop: lambda: Sdict(dict)
 	itemget: dict
@@ -312,15 +333,25 @@ class Typedef(Slots):
 	methods: lambda: Sdict(dict)
 
 	@dispatch
-	def __init__(self, name: str):
-		self.name = name
+	def __init__(self, name: str, *parents: str):
+		self.name, self.parents = name, parents
 
 	@dispatch
-	def __init__(self, name: ADTIdentifierNode | ASTIdentifierNode):
-		self.__init__(name.identifier)
+	def __init__(self, name: str, *parents: ADTIdentifierNode | ASTIdentifierNode):
+		self.__init__(name, *(i.identifier for i in parents))
+
+	@dispatch
+	def __init__(self, name: ADTIdentifierNode | ASTIdentifierNode, *args, **kwargs):
+		self.__init__(name.identifier, *args, **kwargs)
 
 	def __repr__(self):
-		return f"<Typedef for {self.name!r}>"
+		return f"<Typedef for {self.name!r}{f' {self.parents!r}' if (self.parents) else ''}>"
+
+	def __lt__(self, other):
+		return any((i in (other.name, other.parents)) for i in self.parents)
+
+	def __le__(self, other):
+		return (self == other or self < other)
 
 class BuiltinTypedef(Typedef):
 	castable: set
@@ -345,6 +376,17 @@ class DefNamespace(Namespace):
 		return super().type(name.identifier)
 
 	@dispatch
+	def type(self, x: ADTTyperefNode):
+		type_ = self.type(x.type_) # TODO: index
+		if (x.identifier): return self.type(x.identifier) # TODO: of
+		else: return type_
+		super()
+
+	@dispatch
+	def define(self, x: ADTTypenameNode, **kwargs):
+		self.define(Typedef(x.identifier), **kwargs)
+
+	@dispatch
 	def define(self, T: Typedef):
 		super().define(T.name, T)
 
@@ -353,15 +395,16 @@ def std_namespace():
 	with open(STDLIB, 'r') as f:
 		src = f.read()
 
-	st = Lexer().parse_string(sld, src)
-	adt = ADT.build(st, scope='<stdlib>')
-	return adt.analyze()
+	with source_context(src):
+		st = Lexer().parse_string(sld, src)
+		adt = ADT.build(st, scope='<stdlib>')
+		return adt.analyze()
 
 @export
 def interpret_source(src, filename='<string>'):
-	try:
-		print(f"Source: {{\n{'\n'.join(f'\033[1;2;40m{ii:>6} \033[m{i}' for ii, i in enumerate(S(src).indent().split('\n'), 1))}\n}}\n")
+	print(f"Source: {{\n{'\n'.join(f'\033[1;2;40m{ii:>6} \033[m{i}' for ii, i in enumerate(S(src).indent().split('\n'), 1))}\n}}\n")
 
+	with source_context(src, filename):
 		st = Lexer().parse_string(sld, src)
 		#print("Source tree:", st, sep='\n\n', end='\n\n')
 
@@ -373,11 +416,7 @@ def interpret_source(src, filename='<string>'):
 
 		adt.validate(ns)
 
-		print("Interpreted.\n")
-	except SlException as ex:
-		if (not ex.srclines): ex.srclines = src.split('\n')
-		raise
-
+	print("Interpreted.\n")
 	return ns
 
 @apmain

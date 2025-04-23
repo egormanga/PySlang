@@ -7,6 +7,8 @@ classdef: 'class' identifier ('<' identifier)* block
 
 identifier: Slang.identifier
 
+index: '$' Slang.decimal
+
 block: '{' \n* ((Slang.comment | definition ';') \n*)* \n* '}'
 
 definition: typename | castable | iterable | operator | methoddef | fielddef
@@ -17,16 +19,16 @@ castable: 'castable' 'to' identifier
 
 iterable: 'iterable' type
 
-type: identifier ('[' Slang.integer ']')?
+type: identifier ('[' index ']')?
 
 preop: Slang.unop
 binop: Slang.binop type
 postop: binop | Slang.unpostop | itemget | funccall
 operator: typeref (preop '_' | '_' postop)
 
-typeref: (Slang.decimal '.')? type
+typeref: (identifier 'of')? (index '.')? type
 
-itemget: '[' type ']' # TODO: slices
+itemget: '[' type (',' type)* ']' # TODO: slices
 
 funccall: '(' (argdef (',' argdef)*)? ')'
 
@@ -34,7 +36,7 @@ argdef: '*' type | '/' | '*' | type identifier? ('[' integer ']' | '**' | '?' | 
 
 methoddef: typeref identifier funccall
 
-fielddef: typeref identifier (',' identifier)*
+fielddef: type identifier (',' identifier)*
 
 
 :linecomment: Slang.linecomment
@@ -44,5 +46,5 @@ fielddef: typeref identifier (',' identifier)*
 :continuation: \\
 
 
-# by Sdore, 2021-24
+# by Sdore, 2021-25
 #  slang.sdore.me

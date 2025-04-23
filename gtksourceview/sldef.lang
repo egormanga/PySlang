@@ -1,22 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<language id="slangdef" name="Slang definition" version="2.0" _section="Source">
+<language id="sldef" name="S language definition" version="2.0" _section="Other">
 	<metadata>
-		<property name="mimetypes">text/x-slangdef;application/x-slangdef</property>
+		<property name="mimetypes">text/x-sldef;application/x-sldef</property>
 		<property name="globs">*.sldef</property>
 		<property name="line-comment-start">#</property>
 	</metadata>
 
 	<styles>
-		<style id="comment"		name="Comment"			map-to="def:comment"/>
-		<style id="literal"		name="String"			map-to="def:string"/>
-		<style id="regex"		name="Regular expression"	map-to="def:function"/>
-		<style id="escaped-char"	name="Escaped Character"	map-to="def:special-char"/>
-		<style id="operator"		name="Operator"			map-to="def:operator"/>
-		<style id="special"		name="Special"			map-to="def:special-constant"/>
-		<style id="definition"		name="Definition"		map-to="def:preprocessor"/>
-		<style id="final"		name="Final"			map-to="def:statement"/>
-		<style id="reference"		name="Reference"		map-to="def:identifier"/>
+		<style id="comment"       name="Comment"             map-to="def:comment"/>
+		<style id="literal"       name="String"              map-to="def:string"/>
+		<style id="regex"         name="Regular expression"  map-to="def:function"/>
+		<style id="escaped-char"  name="Escaped Character"   map-to="def:special-char"/>
+		<style id="operator"      name="Operator"            map-to="def:operator"/>
+		<style id="special"       name="Special"             map-to="def:special-constant"/>
+		<style id="definition"    name="Definition"          map-to="def:preprocessor"/>
+		<style id="final"         name="Final"               map-to="def:statement"/>
+		<style id="reference"     name="Reference"           map-to="def:identifier"/>
 	</styles>
 
 	<definitions>
@@ -24,12 +24,9 @@
 
 		<context id="escaped-char" style-ref="escaped-char" extend-parent="true">
 			<match extended="true">
-				\\  # leading backslash
-				(
-					[\\#'"abefnrtv] |  # single escaped char
-					x[0-9A-Fa-f]{2} |  # \xhh - character with hex value hh
-					[0-7]{1,3}         # \ooo - character with octal value ooo
-				)
+				\\ ([\\#'"abefnrtv] |
+				    x[0-9A-Fa-f]{2} |
+				    [0-7]{1,3})
 			</match>
 		</context>
 
@@ -73,12 +70,10 @@
 		</context>
 
 		<context id="reference" style-ref="reference">
-			<match extended="true">
-				\%{identifier}
-			</match>
+			<match extended="true">\%{identifier}</match>
 		</context>
 
-		<context id="slangdef" class="no-spell-check">
+		<context id="sldef" class="no-spell-check">
 			<include>
 				<context ref="comment"/>
 				<context ref="literal"/>
@@ -93,5 +88,5 @@
 	</definitions>
 </language>
 
-<!-- by Sdore, 2021-24
+<!-- by Sdore, 2021-25
       slang.sdore.me -->

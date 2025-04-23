@@ -424,7 +424,7 @@ class Instrs:
 	#	self.add(x.code)
 	#	self.add(end)
 
-
+@export
 class LuaCompiler(Compiler):
 	ext = '.lua'
 
@@ -433,7 +433,5 @@ class LuaCompiler(Compiler):
 		instrs = Instrs(name='<module>', ns=ns, filename=filename)
 		return ("require 'Slang'\n\n" + instrs.add(ast.code) + '\n').encode()
 
-compiler = LuaCompiler
-
-# by Sdore, 2024
-# slang.sdore.me
+# by Sdore, 2024-25
+#  slang.sdore.me

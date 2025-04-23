@@ -1,4 +1,5 @@
 import sld:std:*;
+import sld:int:*;
 
 class fd {
 	str read();

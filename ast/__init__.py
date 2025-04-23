@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from .. import sldef, stdlib
-from ..exceptions import SlValidationError
+from ..exceptions import SlException, SlNotAtomicError, SlValidationError, source_context
 from ..lexer import Expr, Lexer, Token
 from typing import Literal
 from utils.nolog import *
@@ -52,9 +52,9 @@ class ASTNode(metaclass=ASTNodeMeta):
 	def __str__(self):
 		return ''
 
-	@property
-	def __typename__(self):
-		return self.__class__.__name__.removeprefix('AST').removesuffix('Node')
+	@classproperty
+	def __typename__(cls):
+		return cls.__name__.removeprefix('AST').removesuffix('Node')
 
 	@abc.abstractmethod
 	def analyze(self, ns: CodeNamespace) -> None:
@@ -137,18 +137,20 @@ class ASTNode(metaclass=ASTNodeMeta):
 			#if (isiterablenostr(a) and bt in a): a = tuple(i for i in a if i is not bt)
 			#else: assert (a == a_ or bt[a] == a_)
 
-			ex = None
+			e = None
 			for aa in typing.get_args(a) or (a if (isiterablenostr(a)) else (a,)):
 				if (isinstance(aa, type) and not isinstance(aa, types.GenericAlias) and issubclass(aa, ASTNode)):
 					v = aa.build(i)
 				elif (isinstance(aa, type)):
 					try: v = aa(i.token, *((0,) if (aa is int) else ()))
-					except Exception as e: ex = e; continue
+					except Exception as ex: e = ex; continue
 				elif (i.token == aa or (pattern is not None and pattern == repr(aa))):
 					v = i.token
 				else: continue
 				break
-			else: raise WTFException(cls, i) from ex
+			else:
+				if (isinstance(e, SlNotAtomicError)): raise SlException.from_node(i, f"Atomic token expected for {cls.__typename__}")
+				else: raise WTFException(cls, i) from e
 
 			if (isinstance(bt, type) and issubclass(bt, list)):
 				try: l = res[key]
@@ -166,7 +168,7 @@ class ASTNode(metaclass=ASTNodeMeta):
 		#	if (e is None): print(f"< {cls.__name__}\n")
 
 	@classmethod
-	def mimic(cls, node: ASTNode, **kwargs):
+	def from_node(cls, node: ASTNode, **kwargs):
 		return cls(**kwargs, lineno=node.lineno, offset=node.offset, length=node.length)
 
 	#@classmethod
@@ -405,7 +407,8 @@ class ASTBinOpExprNode(ASTNode):
 		super().validate(ns)
 
 		lt, rt = map(ns.type, self.expr)
-		if (lt not in rt.binop[self.binop.value] and
+		if (lt != rt and # TODO: castable
+		    lt not in rt.binop[self.binop.value] and
 		    rt not in lt.binop[self.binop.value]): raise SlValidationError.from_node(self, "Incompatible operands", lt.name, self.binop, rt.name)
 
 	def optimize(self, ns, level=0):
@@ -664,6 +667,14 @@ class ASTVardefAssignmentNode(ASTNode):
 		if (self.funccallargs): self.funccallargs.analyze(ns)
 
 		ns.define(self.identifier, type_, value=self.expr)
+
+	def validate(self, ns):
+		super().validate(ns)
+
+		if (self.expr is not None):
+			lt, rt = map(ns.type, (self.identifier, self.expr))
+			if (not lt <= rt and lt not in rt.castable): raise SlValidationError.from_node(self, "Incompatible assignment", lt.name, self.op, rt.name)
+		else: raise TODO
 
 	def optimize(self, ns, level=0):
 		if (level == 0 and not ns.refs(self.identifier)): return None
@@ -1243,7 +1254,7 @@ class ASTAssignmentNode(ASTNode):
 	expr: ASTExprNode
 
 	def __str__(self):
-		return f"{S(', ').join(self.varname)}{','*(len(self._comma) >= len(self.varname))} {self.assignment} {self.expr}"
+		return f"{S(', ').join(self.varname)}{','*(len(self._comma or ()) >= len(self.varname))} {self.assignment} {self.expr}"
 
 	def analyze(self, ns):
 		for i in self.varname:
@@ -1251,6 +1262,12 @@ class ASTAssignmentNode(ASTNode):
 		self.expr.analyze(ns)
 
 		if (len(self.varname) == 1): ns.assign(only(self.varname), self.expr) # TODO: unpack
+
+	def validate(self, ns):
+		super().validate(ns)
+
+		lt, rt = map(ns.type, (self.varname, self.expr))
+		if (not lt <= rt and lt not in rt.castable): raise SlValidationError.from_node(self, "Incompatible assignment", lt.name, self.assignment, rt.name)
 
 	def optimize(self, ns, level=0):
 		self.varname = list(filter(None, (i.optimize(ns, level) for i in self.varname)))
@@ -1267,7 +1284,7 @@ class ASTClassAssignmentNode(ASTNode):
 	expr: ASTExprNode
 
 	def __str__(self):
-		return f"{S(', ').join(self.classvarname)}{','*(len(self._comma) >= len(self.classvarname))} {self.assignment} {self.expr}"
+		return f"{S(', ').join(self.classvarname)}{','*(len(self._comma or ()) >= len(self.classvarname))} {self.assignment} {self.expr}"
 
 	def analyze(self, ns):
 		for i in self.classvarname:
@@ -1397,7 +1414,7 @@ class ASTResumeNode(ASTSimpleNode):
 		return f"{self.resume}{f' {self.integer}' if (self.integer) else ''}"
 
 	def validate(self, ns):
-		assert (self.integer > 0)
+		if (self.integer <= 0): raise SlValidationError.from_node(self, "Positive index expected", self.integer)
 
 class ASTBreakNode(ASTSimpleNode):
 	break_: 'break'
@@ -1407,7 +1424,7 @@ class ASTBreakNode(ASTSimpleNode):
 		return f"{self.break_}{f' {self.integer}' if (self.integer) else ''}"
 
 	def validate(self, ns):
-		assert (self.integer > 0)
+		if (self.integer <= 0): raise SlValidationError.from_node(self, "Positive index expected", self.integer)
 
 class ASTContinueNode(ASTSimpleNode):
 	continue_: 'continue'
@@ -1417,7 +1434,7 @@ class ASTContinueNode(ASTSimpleNode):
 		return f"{self.continue_}{f' {self.integer}' if (self.integer) else ''}"
 
 	def validate(self, ns):
-		assert (self.integer > 0)
+		if (self.integer <= 0): raise SlValidationError.from_node(self, "Positive index expected", self.integer)
 
 class ASTFallthroughNode(ASTSimpleNode):
 	fallthrough: 'fallthrough'
@@ -1448,9 +1465,10 @@ class ASTImportNode(ASTNode):
 					src = f.read()
 
 				from .adt import ADT, sld
-				st = Lexer().parse_string(sld, src)
-				adt = ADT.build(st, scope=filename.join('""'))
-				ns |= adt.analyze()
+				with source_context(src, filename):
+					st = Lexer().parse_string(sld, src)
+					adt = ADT.build(st, scope=filename.join('""'))
+					ns |= adt.analyze()
 			case _: raise WTFException(ns)
 
 	def optimize(self, ns, level):
@@ -1559,7 +1577,7 @@ class ASTTupleNode(ASTNode):
 	rparen: ')'
 
 	def __str__(self):
-		return f"{self.lparen}{S(', ').join(f'{i} {j}' for i, j in zip(self.type_, self.expr))}{','*(len(self.expr) == 1)}{self.rparen}"
+		return f"{self.lparen}{S(', ').join(f'{i} {j}' for i, j in zip(self.type_, self.expr))}{','*(len(self.expr or ()) == 1)}{self.rparen}"
 
 class ASTListNode(ASTNode):
 	lbrk: '['
@@ -1603,13 +1621,13 @@ class ASTLiteralNode(ASTChoiceNode):
 	@classmethod
 	def fold(cls, expr: str, node: ASTNode):
 		match eval(expr, {}):
-			case bool(r): return cls.mimic(node, boolean=('true', 'false')[r])
-			case int(r) | float(r) | complex(r): return cls.mimic(node, number=r)
+			case bool(r): return cls.from_node(node, boolean=('true', 'false')[r])
+			case int(r) | float(r) | complex(r): return cls.from_node(node, number=r)
 			case str(r):
 				match len(r):
-					case 1: return cls.mimic(code, character=f"'{'\\'*(r == '\'')}{r}'")
-					case _: return cls.mimic(node, string=repr(r))
-			case _: raise WTFException(_)
+					case 1: return cls.from_node(code, character=f"'{'\\'*(r == '\'')}{r}'")
+					case _: return cls.from_node(node, string=repr(r))
+			case _: raise WTFException(expr)
 
 
 ## Operators
@@ -1713,7 +1731,7 @@ class Namespace(Slots):
 				case builtins.int: return self.type('int')
 				case builtins.float: return self.type('float')
 				case builtins.complex: return self.type('complex')
-				case _: raise WTFException(_)
+				case _: raise WTFException(x.number)
 		elif (x.character is not None): return self.type('char')
 		elif (x.string is not None): return self.type('str')
 		elif (x.tuple is not None): return self.type('tuple')

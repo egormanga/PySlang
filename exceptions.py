@@ -3,6 +3,20 @@
 
 from utils.nolog import *
 
+class source_context(SlotsOnly):
+	src: str
+	filename: str | None
+
+	def __init__(self, src: str, filename: str = None):
+		self.src, self.filename = src, filename
+
+	def __enter__(self):
+		pass
+
+	def __exit__(self, exc_type, exc, tb):
+		if (exc is not None):
+			if (isinstance(exc, SlException) and not exc.srclines): exc.srclines = self.src.split('\n')
+
 class SlException(Exception, Slots):
 	desc: ...
 	srclines: ...
@@ -38,6 +52,8 @@ class SlException(Exception, Slots):
 	@classmethod
 	def from_node(cls, node, *args, **kwargs):
 		return cls(*args, **setdefault(kwargs, lineno=node.lineno, offset=node.offset, length=node.length))
+
+class SlNotAtomicError(SlException): pass
 
 class SlSyntaxException(SlException): pass
 class SlSyntaxNoToken(SlSyntaxException): pass
@@ -134,5 +150,5 @@ class SlValidationError(SlValidationException):
 	def __init__(self, desc="Validation error", *args, **kwargs):
 		super().__init__(desc, *args, **kwargs)
 
-# by Sdore, 2021-24
+# by Sdore, 2021-25
 #  slang.sdore.me

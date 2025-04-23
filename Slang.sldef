@@ -166,7 +166,7 @@ breakpoint: 'breakpoint'
 
 defkeyword: 'main' | 'exit'
 
-classdefkeyword: 'init' | 'destroy' | 'constr' | 'property' | 'repr' | 'eq' | 'ne' |
+classdefkeyword: 'init' | 'destroy' | 'constr' | 'cast' | 'property' | 'repr' | 'eq' | 'ne' |
                  [('l' | 'g') ('t' | 'e')]
 
 reserved: 'each' | 'foreach' | 'until' | 'repeat' | 'begin' | 'end' |

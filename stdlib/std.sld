@@ -1,9 +1,3 @@
-# `i8`, `i16`, `i32`, `i64`, `i128` — fixed-size integer
-# `u8`, `u16`, `u32`, `u64`, `u128` — fixed-size unsigned integer
-# `f8`, `f16`, `f32`, `f64`, `f128` — fixed-size IEEE-754 floating point number
-# `uf8`, `uf16`, `uf32`, `uf64`, `uf128` — fixed-size unsigned floating point number
-# `c8`, `c16`, `c32`, `c64`, `c128` — fixed-size complex number
-# `uc8`, `uc16`, `uc32`, `uc64`, `uc128` — fixed-size unsigned complex number
 # `int` — unsized («big») integer
 # `uint` — unsized unsigned integer
 # `float` — unsized floating point number
@@ -31,27 +25,35 @@ class bool {
 	bool !_;
 }
 
+class range {
+	typename type;
+
+	iterable type;
+
+	#type _[int];
+}
+
 class int {
 	castable to bool;
 	castable to float;
 
-	int +_;
+	int +_;   # absolute value
 	int -_;
 	int ~_;
-	int ++_;
-	int --_;
+	int ++_;  # pre-increment
+	int --_;  # pre-decrement
 
-	int _!;
-	int _++;
-	int _--;
-	int _**;
+	int _!;   # factorial
+	int _++;  # post-increment
+	int _--;  # post-decrement
+	int _**;  # square
 
 	int _ +int;
 	int _ -int;
 	int _ *int;
-	int _ //int;
+	int _ //int;  # integer division
 	int _ %int;
-	int _ **int;
+	int _ **int;  # power
 	int _ <<int;
 	int _ >>int;
 	int _ &int;
@@ -76,9 +78,11 @@ class float {
 	float _ -float;
 	float _ *float;
 	float _ /float;
-	int _ //float;
+	float _ ^/float;    # ceiling division
+	float _ ~/float;    # rounding division
+	float _ //float;    # flooring division
 	float _ %float;
-	float _ **float;
+	float _ **float;  # power
 
 	int round();
 	int round(int prec);
@@ -107,20 +111,12 @@ class str {
 
 	char _[int];
 
-	str _ +str;
-	str _ *int;
+	str _ +str;  # concatenation
+	str _ *int;  # repetition
 
 	int length();
 
 	str strip(str chars);
-}
-
-class range {
-	typename type;
-
-	iterable type;
-
-	type _[int];
 }
 
 class tuple {
@@ -130,7 +126,7 @@ class tuple {
 
 	bool !_;
 
-	types[0] _[int];
+	types[$1] _[int];
 }
 
 class list {
@@ -140,8 +136,8 @@ class list {
 
 	bool !_;
 
-	list _ +list;
-	list _ *int;
+	list _ +list;  # concatenation
+	list _ *int;   # repetition
 
 	type _[int];
 
@@ -156,12 +152,12 @@ class list {
 
 	void sort();
 
-	0.rettype each(func);
+	#list of $1.rettype each(func);
 }
 
 class func {
-	typename argtypes[];
 	typename rettype;
+	typename argtypes[];
 
 	rettype _(*argtypes);
 
