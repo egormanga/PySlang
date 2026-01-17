@@ -40,7 +40,7 @@ class SlException(Exception, Slots):
 		l, line = (lstripcount(self.srclines[self.lineno-1].partition('\n')[0]) if (self.srclines) else (0, ''))
 		offset = (self.offset-l if (self.offset >= 0) else len(line)+self.offset+1)
 
-		return f"""{self.desc}{f" ({S(', ').join(self.args)})" if (self.args) else ''}{self.at}"""+(':\n'+\
+		return f"""{self.desc}{f": {S(', ').join(self.args)}" if (self.args) else ''}{self.at}"""+(':\n'+\
 			' '*2+'\033[1m'+line[:offset]+'\033[91m'*(self.offset >= 0)+line[offset:]+'\033[0m\n'+\
 			' '*(2+offset)+'\033[95m'+'~'*self.char+'^'+'~'*(min(self.length, len(line)-offset)-1 - self.char)+'\033[0m' if (line) else '') + \
 			(f"\n\n\033[1;95mCaused by:\033[0m\n{self.__cause__ if (isinstance(self.__cause__, SlException)) else ' '+str().join(traceback.format_exception(type(self.__cause__), self.__cause__, self.__cause__.__traceback__))}" if (self.__cause__ is not None) else '')
@@ -150,5 +150,5 @@ class SlValidationError(SlValidationException):
 	def __init__(self, desc="Validation error", *args, **kwargs):
 		super().__init__(desc, *args, **kwargs)
 
-# by Sdore, 2021-25
+# by Sdore, 2021-26
 #  slang.sdore.me

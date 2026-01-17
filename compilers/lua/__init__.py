@@ -62,6 +62,8 @@ class Instrs:
 	@init_defaults
 	def __init__(self, *, name, ns, filename, scpcells: indexset):
 		self.name, self.ns, self.filename, self.scpcells = name, ns, filename, scpcells
+		self._funccall = bool()
+		self._bind = bool()
 
 	@dispatch.meta
 	def add(self, x) -> str: ...
@@ -124,7 +126,7 @@ class Instrs:
 	@dispatch
 	def load(self, x: ASTBinOpExprNode):
 		binop = self.load(x.binop)
-		cast = (binop in '>==<=')
+		cast = (binop in '<=>==')
 		call = binop.endswith('(')
 		return f"({'bool('*cast}{self.load(x.lhs)}{' '*(not binop.startswith(':'))}{binop}{' '*(not call)}{self.load(x.rhs)}{')'*(call+cast)})"
 
@@ -137,12 +139,12 @@ class Instrs:
 		return f"{self.load(x.value)}[{self.load(x.index)}]"
 
 	@dispatch
-	def load(self, x: ASTValueNode, **kwargs):
-		return self.load(x.value, **kwargs)
+	def load(self, x: ASTValueNode):
+		return self.load(x.value)
 
 	@dispatch
-	def load(self, x: ASTExprNode, **kwargs):
-		return self.load((x.expr or x.value), **kwargs)
+	def load(self, x: ASTExprNode):
+		return self.load(x.expr or x.value)
 
 
 	## Non-final
@@ -189,7 +191,11 @@ class Instrs:
 	@dispatch
 	def load(self, x: ASTCallArgNode):
 		if (x.star): return f"table.unpack({self.load(x.expr)})"
-		else: return self.load(x.expr, funccall=True, bind=True)
+		else:
+			funccall, self._funccall = self._funccall, True
+			bind, self._bind = self._bind, True
+			try: return self.load(x.expr)
+			finally: self._funccall, self._bind = funccall, bind
 
 	@dispatch
 	def load(self, x: ASTCallArgsNode):
@@ -200,13 +206,13 @@ class Instrs:
 		return f"({', '.join(map(self.load, (x.callargs or ())))})"
 
 	@dispatch
-	def load(self, x: ASTAttrgetNode, *, funccall=None, bind=None):
+	def load(self, x: ASTAttrgetNode):
 		op = x.attrop.attrselfop.op
 		if (op != '.'): raise NotImplementedError(x)
 
-		if (op == '.' and funccall): op = ':'
+		if (op == '.' and self._funccall): op = ':'
 		r = f"{self.load(x.expr)}{op}{self.load(x.identifier)}"
-		return (f"function(...) return {r}(...) end" if (bind) else r)
+		return (f"(function(...) return {r}(...) end)" if (self._bind) else r)
 
 	@dispatch
 	def load(self, x: ASTClassAttrgetNode):
@@ -286,7 +292,9 @@ class Instrs:
 
 	@dispatch
 	def load(self, x: ASTFunccallNode):
-		return f"{self.load(x.expr, funccall=True)}{self.load(x.funccallargs)}"
+		funccall, self._funccall = self._funccall, True
+		try: return f"{self.load(x.expr)}{self.load(x.funccallargs)}"
+		finally: self._funccall = funccall
 
 	@dispatch
 	def add(self, x: ASTKeyworddefNode):
@@ -328,8 +336,8 @@ class Instrs:
 		return x.identifier
 
 	@dispatch
-	def load(self, x: ASTVarnameNode, *, funccall=None, bind=None):
-		if (x.attrget): return self.load(x.attrget, funccall=funccall, bind=bind)
+	def load(self, x: ASTVarnameNode):
+		if (x.attrget): return self.load(x.attrget)
 		else: return self.load(x.identifier)
 
 	@dispatch
@@ -433,5 +441,5 @@ class LuaCompiler(Compiler):
 		instrs = Instrs(name='<module>', ns=ns, filename=filename)
 		return ("require 'Slang'\n\n" + instrs.add(ast.code) + '\n').encode()
 
-# by Sdore, 2024-25
+# by Sdore, 2024-26
 #  slang.sdore.me

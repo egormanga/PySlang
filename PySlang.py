@@ -10,14 +10,15 @@ from utils import *
 
 @export
 def compile_source(src, filename='<string>', *, compiler, optimize=0):
-	print(f"Source: {{\n{'\n'.join(f'\033[1;2;40m{ii:>6} \033[m{i}' for ii, i in enumerate(S(src).indent().split('\n'), 1))}\n}}\n")
+	print(f"Source: {{\n{'\n'.join(f'\033[1;2;40m{ii:>6} \033[m\t{i}' for ii, i in enumerate(src.splitlines(), 1))}\n}}\n")
 
 	with source_context(src, filename):
 		st = Lexer().parse_string(sldef.load(), src)
 		#print("Source tree:", st, sep='\n\n', end='\n\n')
 
 		ast = AST.build(st, scope=filename.join('""'))
-		print(f"Abstract syntax tree: {{\n{Sstr(ast).indent()}\n}}\n")
+		ast_lines = {k: list(v) for k, v in itertools.groupby(ast.code.statement, operator.attrgetter('lineno'))}
+		print(f"Abstract syntax tree: {{\n{'\n'.join(f'\033[1;2;40m{i:>6} \033[m{S('\n').join(ast_lines.get(i, ())).indent()}' for i in range(1, max(ast_lines)+1))}\n}}\n")
 
 		ns = ast.analyze()
 		ast.validate(ns)
@@ -59,5 +60,5 @@ def main(cargs):
 	with open(output, 'wb') as f:
 		f.write(code)
 
-# by Sdore, 2021-25
+# by Sdore, 2021-26
 #  slang.sdore.me

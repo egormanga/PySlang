@@ -59,9 +59,9 @@ class ADTCodeNode(ADTNode):
 			i.analyze(ns)
 
 class ADTClassdefNode(ADTNode):
-	class_: 'class'
+	class_: Literal['class']
 	identifier: list[ADTIdentifierNode]
-	_lt: list['<'] | None
+	_lt: list[Literal['<']] | None
 	block: ADTBlockNode
 
 	def __str__(self):
@@ -93,18 +93,18 @@ class ADTIdentifierNode(ADTSimpleNode):
 		return f"{self.identifier}"
 
 class ADTIndexNode(ADTSimpleNode):
-	dollar: '$'
+	dollar: Literal['$']
 	decimal: int
 
 	def __str__(self):
 		return f"{self.dollar}{self.decimal}"
 
 class ADTBlockNode(ADTNode):
-	lbrace: '{'
+	lbrace: Literal['{']
 	_codesep: list[Literal['\n', ';']] | None
 	comment: list[ASTCommentNode] | None
 	definition: list[ADTDefinitionNode] | None
-	rbrace: '}'
+	rbrace: Literal['}']
 
 	def __str__(self):
 		return f""" {self.lbrace}{f"\n{S(';\n').join(self.definition).indent()};\n" if (self.definition) else ''}{self.rbrace}"""
@@ -122,7 +122,7 @@ class ADTDefinitionNode(ADTChoiceNode):
 	fielddef: ADTFielddefNode | None
 
 class ADTTypenameNode(ADTNode):
-	typename: 'typename'
+	typename: Literal['typename']
 	identifier: ADTIdentifierNode
 	lbrk: Literal['['] | None
 	index: ADTIndexNode | None
@@ -137,8 +137,8 @@ class ADTTypenameNode(ADTNode):
 		ns.define(self)
 
 class ADTCastableNode(ADTNode):
-	castable: 'castable'
-	to: 'to'
+	castable: Literal['castable']
+	to: Literal['to']
 	identifier: ADTIdentifierNode
 
 	def __str__(self):
@@ -150,7 +150,7 @@ class ADTCastableNode(ADTNode):
 		ns.T.castable.add(self.identifier)
 
 class ADTIterableNode(ADTNode):
-	iterable: 'iterable'
+	iterable: Literal['iterable']
 	type_: ADTTypeNode
 
 	def __str__(self):
@@ -199,7 +199,7 @@ class ADTPostOpNode(ADTChoiceNode):
 class ADTOperatorNode(ADTNode):
 	typeref: ADTTyperefNode
 	preop: ADTPreOpNode | None
-	_: '_'
+	_: Literal['_']
 	postop: ADTPostOpNode | None
 
 	def __str__(self):
@@ -211,10 +211,10 @@ class ADTOperatorNode(ADTNode):
 		if (self.postop): self.postop.analyze(ns)
 
 		type_ = ns.type(self.typeref)
-		if (self.preop): ns.T.unop[self.preop.unop] = type_
+		if (self.preop): ns.T.unpreop[self.preop.unop.value] = type_
 		if (self.postop):
 			if (self.postop.binop): ns.T.binop[self.postop.binop.binop.value][ns.type(self.postop.value.type_)] = type_
-			elif (self.postop.unpostop): ns.T.unop[self.postop.unpostop.value] = type_
+			elif (self.postop.unpostop): ns.T.unpostop[self.postop.unpostop.value] = type_
 			elif (self.postop.itemget): ns.T.itemget[ns.type(self.postop.itemget.type_)] = type_
 			elif (self.postop.funccall): ns.T.call[tuple(self.postop.funccall.argdef or ())] = type_
 			else: raise WTFException(self.postop)
@@ -233,9 +233,9 @@ class ADTTyperefNode(ADTNode):
 		self.type_.analyze(ns)
 
 class ADTItemgetNode(ADTNode):
-	lbrk: '['
+	lbrk: Literal['[']
 	type_: ADTTypeNode
-	rbrk: ']'
+	rbrk: Literal[']']
 
 	def __str__(self):
 		return f"{self.lbrk}{self.type_}{self.rbrk}"
@@ -244,10 +244,10 @@ class ADTItemgetNode(ADTNode):
 		self.type_.analyze(ns)
 
 class ADTFunccallNode(ADTNode):
-	lparen: '('
+	lparen: Literal['(']
 	argdef: list[ADTArgdefNode] | None
-	_comma: list[','] | None
-	rparen: ')'
+	_comma: list[Literal[',']] | None
+	rparen: Literal[')']
 
 	def __str__(self):
 		return f"{self.lparen}{S(', ').join(self.argdef or ())}{self.rparen}"
@@ -294,7 +294,7 @@ class ADTMethoddefNode(ADTNode):
 class ADTFielddefNode(ADTNode):
 	typeref: ADTTyperefNode
 	identifier: list[ADTIdentifierNode]
-	_comma: list[','] | None
+	_comma: list[Literal[',']] | None
 
 	def __str__(self):
 		return f"{self.typeref} {S(', ').join(self.identifier)}"
@@ -326,7 +326,8 @@ class ADT(SlotsInit):
 class Typedef(Slots):
 	name: str
 	parents: tuple[str]
-	unop: dict
+	unpreop: dict
+	unpostop: dict
 	binop: lambda: Sdict(dict)
 	itemget: dict
 	call: dict
@@ -358,7 +359,7 @@ class BuiltinTypedef(Typedef):
 	iterable: ...
 
 	def __str__(self):
-		return 'type'
+		return self.name
 
 class DefNamespace(Namespace):
 	T: Typedef | None
@@ -432,5 +433,5 @@ def main(cargs):
 
 if (__name__ == '__main__'): exit(main())
 
-# by Sdore, 2024-25
+# by Sdore, 2024-26
 #  slang.sdore.me
